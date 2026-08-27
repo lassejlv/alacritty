@@ -51,6 +51,7 @@ use crate::display::hint::{HintMatch, HintState};
 use crate::display::meter::Meter;
 use crate::display::window::Window;
 use crate::event::{Event, EventType, Mouse, SearchState};
+use crate::layout::{BarGeometry, Rect as PaneRect};
 use crate::message_bar::{MessageBuffer, MessageType};
 use crate::renderer::rects::{RenderLine, RenderLines, RenderRect};
 use crate::renderer::{self, GlyphCache, Renderer, platform};
@@ -260,6 +261,21 @@ impl SizeInfo<f32> {
         }
     }
 
+    /// Size covering a pane rectangle with no extra padding.
+    pub fn for_rect(width: f32, height: f32, cell_width: f32, cell_height: f32) -> Self {
+        Self::new(width, height, cell_width, cell_height, 0., 0., false)
+    }
+
+    /// Treat `origin` as padding so mouse mapping uses window coordinates.
+    pub fn with_origin(self, origin_x: f32, origin_y: f32) -> Self {
+        let mut size = self;
+        size.width = self.width - 2. * self.padding_x + 2. * origin_x;
+        size.height = self.height - 2. * self.padding_y + 2. * origin_y;
+        size.padding_x = origin_x;
+        size.padding_y = origin_y;
+        size
+    }
+
     #[inline]
     pub fn reserve_lines(&mut self, count: usize) {
         self.screen_lines = cmp::max(self.screen_lines.saturating_sub(count), MIN_SCREEN_LINES);
@@ -384,6 +400,9 @@ pub struct Display {
 
     /// Font size used by the window.
     pub font_size: FontSize,
+
+    /// Origin of the pane currently being painted, in window pixels.
+    pane_origin: (f32, f32),
 
     // Mouse point position when highlighting hints.
     hint_mouse_point: Option<Point>,
@@ -539,6 +558,7 @@ impl Display {
             cursor_hidden: Default::default(),
             meter: Default::default(),
             ime: Default::default(),
+            pane_origin: Default::default(),
         })
     }
 
@@ -655,6 +675,7 @@ impl Display {
         message_buffer: &MessageBuffer,
         search_state: &mut SearchState,
         config: &UiConfig,
+        resize_terminal: bool,
     ) where
         T: EventListener,
     {
@@ -703,16 +724,19 @@ impl Display {
         let search_active = search_state.history_index.is_some();
         let message_bar_lines = message_buffer.message().map_or(0, |m| m.text(&new_size).len());
         let search_lines = usize::from(search_active);
-        new_size.reserve_lines(message_bar_lines + search_lines);
+        if resize_terminal {
+            new_size.reserve_lines(message_bar_lines + search_lines);
+        }
 
         // Update resize increments.
         if config.window.resize_increments {
             self.window.set_resize_increments(PhysicalSize::new(cell_width, cell_height));
         }
 
-        // Resize when terminal when its dimensions have changed.
-        if self.size_info.screen_lines() != new_size.screen_lines
-            || self.size_info.columns() != new_size.columns()
+        // Resize the terminal when its dimensions have changed.
+        if resize_terminal
+            && (self.size_info.screen_lines() != new_size.screen_lines
+                || self.size_info.columns() != new_size.columns())
         {
             // Resize PTY.
             pty_resize_handle.on_resize(new_size.into());
@@ -721,6 +745,8 @@ impl Display {
             terminal.resize(new_size);
 
             // Resize damage tracking.
+            self.damage_tracker.resize(new_size.screen_lines(), new_size.columns());
+        } else if !resize_terminal {
             self.damage_tracker.resize(new_size.screen_lines(), new_size.columns());
         }
 
@@ -767,19 +793,93 @@ impl Display {
         info!("Width: {}, Height: {}", self.size_info.width(), self.size_info.height());
     }
 
-    /// Draw the screen.
-    ///
-    /// A reference to Term whose state is being drawn must be provided.
-    ///
-    /// This call may block if vsync is enabled.
+    /// Prepare the GL context for drawing all panes.
+    pub fn begin_frame(&mut self, config: &UiConfig) {
+        self.make_current();
+        let background_color = config.colors.primary.background;
+        self.renderer.clear(background_color, config.window_opacity());
+        self.damage_tracker.frame().mark_fully_damaged();
+    }
+
+    /// Present the frame after all panes have been painted.
+    pub fn end_frame(&mut self, scheduler: &mut Scheduler, config: &UiConfig) {
+        self.renderer.set_viewport(&self.size_info);
+        self.renderer.resize_projection(&self.size_info);
+        self.draw_render_timer(config);
+        self.window.pre_present_notify();
+
+        if self.damage_tracker.debug {
+            let mut rects = Vec::new();
+            self.highlight_damage(&mut rects);
+            let metrics = self.glyph_cache.font_metrics();
+            self.renderer.draw_rects(&self.size_info, &metrics, rects);
+        }
+
+        self.swap_buffers();
+
+        if matches!(self.raw_window_handle, RawWindowHandle::Xcb(_) | RawWindowHandle::Xlib(_)) {
+            self.renderer.finish();
+        }
+
+        if !matches!(self.raw_window_handle, RawWindowHandle::Wayland(_)) {
+            self.request_frame(scheduler);
+        }
+
+        self.damage_tracker.swap_damage();
+    }
+
+    /// Draw split dividers in window coordinates.
+    pub fn paint_split_bars(&mut self, bars: &[BarGeometry], config: &UiConfig) {
+        if bars.is_empty() {
+            return;
+        }
+
+        let color =
+            config.colors.line_indicator.foreground.unwrap_or(config.colors.primary.foreground);
+        let metrics = self.glyph_cache.font_metrics();
+        let rects = bars
+            .iter()
+            .map(|bar| {
+                RenderRect::new(
+                    bar.rect.x,
+                    bar.rect.y,
+                    bar.rect.width.max(1.),
+                    bar.rect.height.max(1.),
+                    color,
+                    1.,
+                )
+            })
+            .collect();
+        self.renderer.draw_rects(&self.size_info, &metrics, rects);
+    }
+
+    /// Draw one pane. The caller must call [`Self::begin_frame`] first and
+    /// [`Self::end_frame`] after all panes and split bars.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw<T: EventListener>(
         &mut self,
         mut terminal: MutexGuard<'_, Term<T>>,
-        scheduler: &mut Scheduler,
         message_buffer: &MessageBuffer,
         config: &UiConfig,
         search_state: &mut SearchState,
+        pane_size: SizeInfo,
+        origin: PaneRect,
+        window_height: f32,
     ) {
+        let saved_size = self.size_info;
+        self.size_info = pane_size;
+        self.pane_origin = (origin.x, origin.y);
+
+        let gl_x = origin.x.round() as i32;
+        let gl_y = (window_height - origin.y - origin.height).round() as i32;
+        self.renderer.set_gl_viewport(
+            gl_x,
+            gl_y,
+            origin.width.max(1.).round() as i32,
+            origin.height.max(1.).round() as i32,
+        );
+        self.renderer.resize_projection(&pane_size);
+
         // Collect renderable content before the terminal is dropped.
         let mut content = RenderableContent::new(config, self, &terminal, search_state);
         let mut grid_cells = Vec::new();
@@ -835,7 +935,6 @@ impl Display {
         // Make sure this window's OpenGL context is active.
         self.make_current();
 
-        self.renderer.clear(background_color, config.window_opacity());
         let mut lines = RenderLines::new();
 
         // Optimize loop hint comparator.
@@ -848,7 +947,12 @@ impl Display {
 
             // Ensure macOS hasn't reset our viewport.
             #[cfg(target_os = "macos")]
-            self.renderer.set_viewport(&size_info);
+            self.renderer.set_gl_viewport(
+                gl_x,
+                gl_y,
+                origin.width.max(1.).round() as i32,
+                origin.height.max(1.).round() as i32,
+            );
 
             let glyph_cache = &mut self.glyph_cache;
             let highlighted_hint = &self.highlighted_hint;
@@ -987,7 +1091,7 @@ impl Display {
             self.damage_tracker.frame().add_viewport_rect(&size_info, x, y as i32, width, height);
 
             // Draw rectangles.
-            self.renderer.draw_rects(&size_info, &metrics, rects);
+            self.renderer.draw_rects_at(gl_x, gl_y, &size_info, &metrics, rects);
 
             // Relay messages to the user.
             let glyph_cache = &mut self.glyph_cache;
@@ -1005,10 +1109,8 @@ impl Display {
             }
         } else {
             // Draw rectangles.
-            self.renderer.draw_rects(&size_info, &metrics, rects);
+            self.renderer.draw_rects_at(gl_x, gl_y, &size_info, &metrics, rects);
         }
-
-        self.draw_render_timer(config);
 
         // Draw hyperlink uri preview.
         if has_highlighted_hint {
@@ -1016,34 +1118,8 @@ impl Display {
             self.draw_hyperlink_preview(config, cursor_point, display_offset);
         }
 
-        // Notify winit that we're about to present.
-        self.window.pre_present_notify();
-
-        // Highlight damage for debugging.
-        if self.damage_tracker.debug {
-            let damage = self.damage_tracker.shape_frame_damage(self.size_info.into());
-            let mut rects = Vec::with_capacity(damage.len());
-            self.highlight_damage(&mut rects);
-            self.renderer.draw_rects(&self.size_info, &metrics, rects);
-        }
-
-        // Clearing debug highlights from the previous frame requires full redraw.
-        self.swap_buffers();
-
-        if matches!(self.raw_window_handle, RawWindowHandle::Xcb(_) | RawWindowHandle::Xlib(_)) {
-            // On X11 `swap_buffers` does not block for vsync. However the next OpenGl command
-            // will block to synchronize (this is `glClear` in Alacritty), which causes a
-            // permanent one frame delay.
-            self.renderer.finish();
-        }
-
-        // XXX: Request the new frame after swapping buffers, so the
-        // time to finish OpenGL operations is accounted for in the timeout.
-        if !matches!(self.raw_window_handle, RawWindowHandle::Wayland(_)) {
-            self.request_frame(scheduler);
-        }
-
-        self.damage_tracker.swap_damage();
+        self.size_info = saved_size;
+        self.pane_origin = (0., 0.);
     }
 
     /// Update to a new configuration.
@@ -1138,7 +1214,10 @@ impl Display {
             Some(preedit) => preedit,
             None => {
                 // In case we don't have preedit, just set the popup point.
-                self.window.update_ime_position(point, &self.size_info);
+                self.window.update_ime_position(
+                    point,
+                    &self.size_info.with_origin(self.pane_origin.0, self.pane_origin.1),
+                );
                 return;
             },
         };
@@ -1212,7 +1291,10 @@ impl Display {
             _ => end,
         };
 
-        self.window.update_ime_position(ime_popup_point, &self.size_info);
+        self.window.update_ime_position(
+            ime_popup_point,
+            &self.size_info.with_origin(self.pane_origin.0, self.pane_origin.1),
+        );
     }
 
     /// Format search regex to account for the cursor and fullwidth characters.

@@ -239,28 +239,36 @@ impl Renderer {
         }
     }
 
-    /// Draw all rectangles simultaneously to prevent excessive program swaps.
+    /// Draw rectangles in the full `size_info` coordinate space at the window origin.
     pub fn draw_rects(&mut self, size_info: &SizeInfo, metrics: &Metrics, rects: Vec<RenderRect>) {
+        self.draw_rects_at(0, 0, size_info, metrics, rects);
+    }
+
+    /// Draw rectangles with a GL viewport origin, then restore the previous viewport.
+    pub fn draw_rects_at(
+        &mut self,
+        x: i32,
+        y: i32,
+        size_info: &SizeInfo,
+        metrics: &Metrics,
+        rects: Vec<RenderRect>,
+    ) {
         if rects.is_empty() {
             return;
         }
 
-        // Prepare rect rendering state.
+        let mut previous = [0i32; 4];
         unsafe {
-            // Remove padding from viewport.
-            gl::Viewport(0, 0, size_info.width() as i32, size_info.height() as i32);
+            gl::GetIntegerv(gl::VIEWPORT, previous.as_mut_ptr());
+            gl::Viewport(x, y, size_info.width() as i32, size_info.height() as i32);
             gl::BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::SRC_ALPHA, gl::ONE);
         }
 
         self.rect_renderer.draw(size_info, metrics, rects);
 
-        // Activate regular state again.
         unsafe {
-            // Reset blending strategy.
             gl::BlendFunc(gl::SRC1_COLOR, gl::ONE_MINUS_SRC1_COLOR);
-
-            // Restore viewport with padding.
-            self.set_viewport(size_info);
+            gl::Viewport(previous[0], previous[1], previous[2], previous[3]);
         }
     }
 
@@ -339,9 +347,22 @@ impl Renderer {
         }
     }
 
+    /// Set an explicit OpenGL viewport (origin bottom-left).
+    #[inline]
+    pub fn set_gl_viewport(&self, x: i32, y: i32, width: i32, height: i32) {
+        unsafe {
+            gl::Viewport(x, y, width, height);
+        }
+    }
+
     /// Resize the renderer.
     pub fn resize(&self, size_info: &SizeInfo) {
         self.set_viewport(size_info);
+        self.resize_projection(size_info);
+    }
+
+    /// Update text projection without changing the GL viewport.
+    pub fn resize_projection(&self, size_info: &SizeInfo) {
         match &self.text_renderer {
             TextRendererProvider::Gles2(renderer) => renderer.resize(size_info),
             TextRendererProvider::Glsl3(renderer) => renderer.resize(size_info),

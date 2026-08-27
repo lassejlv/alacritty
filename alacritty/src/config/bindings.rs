@@ -220,6 +220,27 @@ pub enum Action {
     /// Create a new Alacritty window.
     CreateNewWindow,
 
+    /// Split the focused pane to the right.
+    SplitRight,
+
+    /// Split the focused pane downward.
+    SplitDown,
+
+    /// Close the focused pane.
+    ClosePane,
+
+    /// Focus the pane to the left.
+    FocusPaneLeft,
+
+    /// Focus the pane to the right.
+    FocusPaneRight,
+
+    /// Focus the pane above.
+    FocusPaneUp,
+
+    /// Focus the pane below.
+    FocusPaneDown,
+
     /// Create new window in a tab.
     CreateNewTab,
 
@@ -552,6 +573,13 @@ fn common_keybindings() -> Vec<KeyBinding> {
         Insert, ModifiersState::SHIFT,                           ~BindingMode::VI;                       Action::PasteSelection;
         "c",    ModifiersState::CONTROL | ModifiersState::SHIFT;                                         Action::Copy;
         "c",    ModifiersState::CONTROL | ModifiersState::SHIFT, +BindingMode::VI, ~BindingMode::SEARCH; Action::ClearSelection;
+        "d",    ModifiersState::CONTROL | ModifiersState::SHIFT;                                         Action::SplitRight;
+        "d",    ModifiersState::CONTROL | ModifiersState::SHIFT | ModifiersState::ALT;                   Action::SplitDown;
+        "w",    ModifiersState::CONTROL | ModifiersState::SHIFT;                                         Action::ClosePane;
+        ArrowLeft,  ModifiersState::CONTROL | ModifiersState::ALT;                                       Action::FocusPaneLeft;
+        ArrowRight, ModifiersState::CONTROL | ModifiersState::ALT;                                       Action::FocusPaneRight;
+        ArrowUp,    ModifiersState::CONTROL | ModifiersState::ALT;                                       Action::FocusPaneUp;
+        ArrowDown,  ModifiersState::CONTROL | ModifiersState::ALT;                                       Action::FocusPaneDown;
         "0",    ModifiersState::CONTROL;                                                                 Action::ResetFontSize;
         "=",    ModifiersState::CONTROL;                                                                 Action::IncreaseFontSize;
         "+",    ModifiersState::CONTROL;                                                                 Action::IncreaseFontSize;
@@ -605,6 +633,13 @@ pub fn platform_key_bindings() -> Vec<KeyBinding> {
         "v",    ModifiersState::SUPER, ~BindingMode::VI;                       Action::Paste;
         "v",    ModifiersState::SUPER, +BindingMode::VI, +BindingMode::SEARCH; Action::Paste;
         "n",    ModifiersState::SUPER;                                         Action::CreateNewWindow;
+        "d",    ModifiersState::SUPER;                                         Action::SplitRight;
+        "d",    ModifiersState::SUPER | ModifiersState::SHIFT;                 Action::SplitDown;
+        "w",    ModifiersState::SUPER | ModifiersState::SHIFT;                 Action::ClosePane;
+        ArrowLeft,  ModifiersState::SUPER | ModifiersState::ALT;               Action::FocusPaneLeft;
+        ArrowRight, ModifiersState::SUPER | ModifiersState::ALT;               Action::FocusPaneRight;
+        ArrowUp,    ModifiersState::SUPER | ModifiersState::ALT;               Action::FocusPaneUp;
+        ArrowDown,  ModifiersState::SUPER | ModifiersState::ALT;               Action::FocusPaneDown;
         "f",    ModifiersState::CONTROL | ModifiersState::SUPER;               Action::ToggleFullscreen;
         "c",    ModifiersState::SUPER;                                         Action::Copy;
         "c",    ModifiersState::SUPER, +BindingMode::VI, ~BindingMode::SEARCH; Action::ClearSelection;

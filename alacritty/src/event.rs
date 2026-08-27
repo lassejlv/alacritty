@@ -58,12 +58,13 @@ use crate::display::hint::HintMatch;
 use crate::display::window::{ImeInhibitor, Window};
 use crate::display::{Display, Preedit, SizeInfo};
 use crate::input::{self, ActionContext as _, FONT_SIZE_STEP};
+use crate::layout::{Axis, FocusDirection, PaneId};
 use crate::logging::{LOG_TARGET_CONFIG, LOG_TARGET_WINIT};
 use crate::message_bar::{Message, MessageBuffer};
 #[cfg(unix)]
 use crate::polling::ipc::{self, SocketReply};
 use crate::scheduler::{Scheduler, TimerId, Topic};
-use crate::window_context::WindowContext;
+use crate::window_context::{PendingPaneOp, WindowContext};
 
 /// Duration after the last user input until an unlimited search is performed.
 pub const TYPING_SEARCH_DELAY: Duration = Duration::from_millis(500);
@@ -287,8 +288,10 @@ impl ApplicationHandler<Event> for Processor {
             info!(target: LOG_TARGET_WINIT, "{event:?}");
         }
 
+        let Event { payload, window_id, pane_id } = event;
+
         // Handle events which don't mandate the WindowId.
-        match (event.payload, event.window_id.as_ref()) {
+        match (payload, window_id.as_ref()) {
             // Process IPC config update.
             #[cfg(unix)]
             (EventType::IpcConfig(ipc_config), window_id) => {
@@ -343,8 +346,8 @@ impl ApplicationHandler<Event> for Processor {
             (EventType::ConfigReload(path), _) => {
                 // Clear config logs from message bar for all terminals.
                 for window_context in self.windows.values_mut() {
-                    if !window_context.message_buffer.is_empty() {
-                        window_context.message_buffer.remove_target(LOG_TARGET_CONFIG);
+                    if window_context.has_messages() {
+                        window_context.remove_message_target(LOG_TARGET_CONFIG);
                         window_context.display.pending_update.dirty = true;
                     }
                 }
@@ -415,6 +418,16 @@ impl ApplicationHandler<Event> for Processor {
                 }
             },
             (EventType::Terminal(TerminalEvent::Exit), Some(window_id)) => {
+                if let Some(window_context) = self.windows.get_mut(window_id) {
+                    if !window_context.closing && window_context.close_pane(pane_id) {
+                        window_context.dirty = true;
+                        if window_context.display.window.has_frame {
+                            window_context.display.window.request_redraw();
+                        }
+                        return;
+                    }
+                }
+
                 // Remove the closed terminal.
                 let window_context = match self.windows.entry(*window_id) {
                     // Don't exit when terminal exits if user asked to hold the window.
@@ -456,7 +469,13 @@ impl ApplicationHandler<Event> for Processor {
                         &self.proxy,
                         &mut self.clipboard,
                         &mut self.scheduler,
-                        WinitEvent::UserEvent(Event::new(payload, *window_id)),
+                        WinitEvent::UserEvent({
+                            let mut event = Event::new(payload, *window_id);
+                            if let Some(pane_id) = pane_id {
+                                event = event.with_pane(pane_id);
+                            }
+                            event
+                        }),
                     );
                 }
             },
@@ -522,13 +541,21 @@ pub struct Event {
     /// Limit event to a specific window.
     window_id: Option<WindowId>,
 
+    /// Limit terminal events to a specific pane.
+    pane_id: Option<PaneId>,
+
     /// Event payload.
     payload: EventType,
 }
 
 impl Event {
     pub fn new<I: Into<Option<WindowId>>>(payload: EventType, window_id: I) -> Self {
-        Self { window_id: window_id.into(), payload }
+        Self { window_id: window_id.into(), pane_id: None, payload }
+    }
+
+    pub fn with_pane(mut self, pane_id: PaneId) -> Self {
+        self.pane_id = Some(pane_id);
+        self
     }
 }
 
@@ -681,6 +708,8 @@ pub struct ActionContext<'a, N, T> {
     pub dirty: &'a mut bool,
     pub occluded: &'a mut bool,
     pub preserve_title: bool,
+    pub pending_pane_op: &'a mut Option<PendingPaneOp>,
+    pub input_size: SizeInfo,
     #[cfg(not(windows))]
     pub master_fd: RawFd,
     #[cfg(not(windows))]
@@ -701,7 +730,7 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
 
     #[inline]
     fn size_info(&self) -> SizeInfo {
-        self.display.size_info
+        self.input_size
     }
 
     fn scroll(&mut self, scroll: Scroll) {
@@ -879,6 +908,23 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
         }
 
         self.spawn_daemon(&alacritty, &args);
+    }
+
+    fn split_pane(&mut self, axis: Axis) {
+        *self.pending_pane_op = Some(PendingPaneOp::Split(axis));
+    }
+
+    fn close_pane(&mut self) {
+        *self.pending_pane_op = Some(PendingPaneOp::Close);
+    }
+
+    fn focus_pane(&mut self, direction: FocusDirection) {
+        *self.pending_pane_op = Some(PendingPaneOp::Focus(direction));
+    }
+
+    fn quit_window(&mut self) {
+        *self.pending_pane_op = Some(PendingPaneOp::QuitWindow);
+        self.terminal.exit();
     }
 
     #[cfg(not(windows))]
@@ -1940,7 +1986,7 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                     WindowEvent::CloseRequested => {
                         // User asked to close the window, so no need to hold it.
                         self.ctx.window().hold = false;
-                        self.ctx.terminal.exit();
+                        self.ctx.quit_window();
                     },
                     WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                         let old_scale_factor =
@@ -2073,21 +2119,23 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
 pub struct EventProxy {
     proxy: EventLoopProxy<Event>,
     window_id: WindowId,
+    pane_id: PaneId,
 }
 
 impl EventProxy {
-    pub fn new(proxy: EventLoopProxy<Event>, window_id: WindowId) -> Self {
-        Self { proxy, window_id }
+    pub fn new(proxy: EventLoopProxy<Event>, window_id: WindowId, pane_id: PaneId) -> Self {
+        Self { proxy, window_id, pane_id }
     }
 
     /// Send an event to the event loop.
     pub fn send_event(&self, event: EventType) {
-        let _ = self.proxy.send_event(Event::new(event, self.window_id));
+        let _ = self.proxy.send_event(Event::new(event, self.window_id).with_pane(self.pane_id));
     }
 }
 
 impl EventListener for EventProxy {
     fn send_event(&self, event: TerminalEvent) {
-        let _ = self.proxy.send_event(Event::new(event.into(), self.window_id));
+        let _ =
+            self.proxy.send_event(Event::new(event.into(), self.window_id).with_pane(self.pane_id));
     }
 }

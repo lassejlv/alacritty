@@ -841,6 +841,20 @@ _https://docs.rs/winit/latest/winit/keyboard/enum.Key.html#variant.Dead_
 			Spawn a new instance of Alacritty.
 		*CreateNewWindow*
 			Create a new Alacritty window.
+		*SplitRight*
+			Split the focused pane to the right.
+		*SplitDown*
+			Split the focused pane downward.
+		*ClosePane*
+			Close the focused pane. Closes the window when it is the last pane.
+		*FocusPaneLeft*
+			Focus the pane to the left.
+		*FocusPaneRight*
+			Focus the pane to the right.
+		*FocusPaneUp*
+			Focus the pane above.
+		*FocusPaneDown*
+			Focus the pane below.
 		*ToggleFullscreen*
 			Toggle fullscreen.
 		*ToggleMaximized*

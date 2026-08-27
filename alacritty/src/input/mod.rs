@@ -47,6 +47,7 @@ use crate::display::{Display, SizeInfo};
 use crate::event::{
     ClickState, Event, EventType, InlineSearchState, Mouse, TouchPurpose, TouchZoom,
 };
+use crate::layout::{Axis, FocusDirection};
 use crate::message_bar::{self, Message};
 use crate::scheduler::{Scheduler, TimerId, Topic};
 
@@ -138,6 +139,12 @@ pub trait ActionContext<T: EventListener> {
     fn semantic_word(&self, point: Point) -> String;
     fn on_terminal_input_start(&mut self) {}
     fn paste(&mut self, _text: &str, _bracketed: bool) {}
+    fn split_pane(&mut self, _axis: crate::layout::Axis) {}
+    fn close_pane(&mut self) {}
+    fn focus_pane(&mut self, _direction: crate::layout::FocusDirection) {}
+    fn quit_window(&mut self) {
+        self.terminal_mut().exit();
+    }
     fn spawn_daemon<I, S>(&self, _program: &str, _args: I)
     where
         I: IntoIterator<Item = S> + Debug + Copy,
@@ -345,7 +352,7 @@ impl<T: EventListener> Execute<T> for Action {
             Action::Minimize => ctx.window().set_minimized(true),
             Action::Quit => {
                 ctx.window().hold = false;
-                ctx.terminal_mut().exit();
+                ctx.quit_window();
             },
             Action::IncreaseFontSize => ctx.change_font_size(FONT_SIZE_STEP),
             Action::DecreaseFontSize => ctx.change_font_size(-FONT_SIZE_STEP),
@@ -406,6 +413,13 @@ impl<T: EventListener> Execute<T> for Action {
             #[cfg(not(target_os = "macos"))]
             Action::CreateNewWindow => ctx.create_new_window(),
             Action::SpawnNewInstance => ctx.spawn_new_instance(),
+            Action::SplitRight => ctx.split_pane(Axis::Vertical),
+            Action::SplitDown => ctx.split_pane(Axis::Horizontal),
+            Action::ClosePane => ctx.close_pane(),
+            Action::FocusPaneLeft => ctx.focus_pane(FocusDirection::Left),
+            Action::FocusPaneRight => ctx.focus_pane(FocusDirection::Right),
+            Action::FocusPaneUp => ctx.focus_pane(FocusDirection::Up),
+            Action::FocusPaneDown => ctx.focus_pane(FocusDirection::Down),
             #[cfg(target_os = "macos")]
             Action::CreateNewWindow => ctx.create_new_window(None),
             #[cfg(target_os = "macos")]

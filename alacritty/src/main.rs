@@ -34,11 +34,13 @@ mod daemon;
 mod display;
 mod event;
 mod input;
+mod layout;
 mod logging;
 #[cfg(target_os = "macos")]
 mod macos;
 mod message_bar;
 mod migrate;
+mod pane;
 #[cfg(windows)]
 mod panic;
 #[cfg(unix)]

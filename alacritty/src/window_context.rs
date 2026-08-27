@@ -1,70 +1,81 @@
 //! Terminal window context.
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::mem;
-#[cfg(not(windows))]
-use std::os::unix::io::{AsRawFd, RawFd};
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Instant;
 
 use glutin::config::Config as GlutinConfig;
 use glutin::display::GetGlDisplay;
 #[cfg(all(feature = "x11", not(any(target_os = "macos", windows))))]
 use glutin::platform::x11::X11GlConfigExt;
-use log::info;
 use serde_json as json;
-use winit::event::{Event as WinitEvent, Modifiers, WindowEvent};
+use winit::event::{ElementState, Event as WinitEvent, Modifiers, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::raw_window_handle::HasDisplayHandle;
-use winit::window::WindowId;
+use winit::window::{CursorIcon, WindowId};
 
-use alacritty_terminal::event::Event as TerminalEvent;
-use alacritty_terminal::event_loop::{EventLoop as PtyEventLoop, Msg, Notifier};
+use alacritty_terminal::event::{Event as TerminalEvent, OnResize};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::Direction;
-use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Term, TermMode};
-use alacritty_terminal::tty;
 
 use crate::cli::{ParsedOptions, WindowOptions};
 use crate::clipboard::Clipboard;
 use crate::config::UiConfig;
-use crate::display::Display;
+#[cfg(not(windows))]
+use crate::daemon::foreground_process_path;
 use crate::display::window::Window;
-use crate::event::{
-    ActionContext, Event, EventProxy, InlineSearchState, Mouse, SearchState, TouchPurpose,
+use crate::display::{Display, SizeInfo};
+use crate::event::{ActionContext, Event, Mouse, SearchState, TouchPurpose};
+use crate::layout::{
+    Axis, FocusDirection, Hit, Layout, LayoutGeometry, LayoutMetrics, PaneId, Rect, SplitId,
 };
 #[cfg(unix)]
 use crate::logging::LOG_TARGET_IPC_CONFIG;
 use crate::message_bar::MessageBuffer;
+use crate::pane::Pane;
 use crate::scheduler::Scheduler;
 use crate::{input, renderer};
 
+/// Pending layout action produced by a keybinding.
+#[derive(Debug, Clone, Copy)]
+pub enum PendingPaneOp {
+    Split(Axis),
+    Close,
+    Focus(FocusDirection),
+    QuitWindow,
+}
+
+/// Active split-bar drag.
+#[derive(Debug, Clone, Copy)]
+struct SplitDrag {
+    id: SplitId,
+    axis: Axis,
+}
+
 /// Event context for one individual Alacritty window.
 pub struct WindowContext {
-    pub message_buffer: MessageBuffer,
     pub display: Display,
     pub dirty: bool,
+    pub closing: bool,
     event_queue: Vec<WinitEvent<Event>>,
-    terminal: Arc<FairMutex<Term<EventProxy>>>,
-    cursor_blink_timed_out: bool,
+    panes: HashMap<PaneId, Pane>,
+    layout: Layout,
+    geometry: LayoutGeometry,
+    focused: PaneId,
+    split_drag: Option<SplitDrag>,
+    pending_pane_op: Option<PendingPaneOp>,
     prev_bell_cmd: Option<Instant>,
     modifiers: Modifiers,
-    inline_search_state: InlineSearchState,
-    search_state: SearchState,
-    notifier: Notifier,
     mouse: Mouse,
     touch: TouchPurpose,
     occluded: bool,
     preserve_title: bool,
-    #[cfg(not(windows))]
-    master_fd: RawFd,
-    #[cfg(not(windows))]
-    shell_pid: u32,
     window_config: ParsedOptions,
     config: Rc<UiConfig>,
 }
@@ -82,8 +93,6 @@ impl WindowContext {
         let mut identity = config.window.identity.clone();
         options.window_identity.override_identity_config(&mut identity);
 
-        // Windows has different order of GL platform initialization compared to any other platform;
-        // it requires the window first.
         #[cfg(windows)]
         let window = Window::new(event_loop, &config, &identity, &mut options)?;
         #[cfg(windows)]
@@ -109,7 +118,6 @@ impl WindowContext {
             gl_config.x11_visual(),
         )?;
 
-        // Create context.
         let gl_context =
             renderer::platform::create_gl_context(&gl_display, &gl_config, raw_window_handle)?;
 
@@ -132,8 +140,6 @@ impl WindowContext {
         let mut identity = config.window.identity.clone();
         options.window_identity.override_identity_config(&mut identity);
 
-        // Check if new window will be opened as a tab.
-        // This must be done before `Window::new()`, which unsets `window_tabbing_id`.
         #[cfg(target_os = "macos")]
         let tabbed = options.window_tabbing_id.is_some();
         #[cfg(not(target_os = "macos"))]
@@ -148,7 +154,6 @@ impl WindowContext {
             gl_config.x11_visual(),
         )?;
 
-        // Create context.
         let raw_window_handle = window.raw_window_handle();
         let gl_context =
             renderer::platform::create_gl_context(&gl_display, gl_config, Some(raw_window_handle))?;
@@ -156,16 +161,11 @@ impl WindowContext {
         let display = Display::new(window, gl_context, &config, tabbed)?;
 
         let mut window_context = Self::new(display, config, options, proxy)?;
-
-        // Set the config overrides at startup.
-        //
-        // These are already applied to `config`, so no update is necessary.
         window_context.window_config = config_overrides;
 
         Ok(window_context)
     }
 
-    /// Create a new terminal window context.
     fn new(
         display: Display,
         config: Rc<UiConfig>,
@@ -177,104 +177,62 @@ impl WindowContext {
 
         let preserve_title = options.window_identity.title.is_some();
 
-        info!(
-            "PTY dimensions: {:?} x {:?}",
-            display.size_info.screen_lines(),
-            display.size_info.columns()
+        let (layout, pane_id) = Layout::new();
+        let bounds = content_bounds(&display.size_info);
+        let size = SizeInfo::for_rect(
+            bounds.width,
+            bounds.height,
+            display.size_info.cell_width(),
+            display.size_info.cell_height(),
         );
 
-        let event_proxy = EventProxy::new(proxy, display.window.id());
+        let pane = Pane::spawn(pane_id, &config, size, display.window.id(), proxy, pty_config)?;
+        pane.terminal.lock().is_focused = true;
 
-        // Create the terminal.
-        //
-        // This object contains all of the state about what's being displayed. It's
-        // wrapped in a clonable mutex since both the I/O loop and display need to
-        // access it.
-        let terminal = Term::new(config.term_options(), &display.size_info, event_proxy.clone());
-        let terminal = Arc::new(FairMutex::new(terminal));
+        let mut panes = HashMap::new();
+        panes.insert(pane_id, pane);
 
-        // Create the PTY.
-        //
-        // The PTY forks a process to run the shell on the slave side of the
-        // pseudoterminal. A file descriptor for the master side is retained for
-        // reading/writing to the shell.
-        let pty = tty::new(&pty_config, display.size_info.into(), display.window.id().into())?;
-
-        #[cfg(not(windows))]
-        let master_fd = pty.file().as_raw_fd();
-        #[cfg(not(windows))]
-        let shell_pid = pty.child().id();
-
-        // Create the pseudoterminal I/O loop.
-        //
-        // PTY I/O is ran on another thread as to not occupy cycles used by the
-        // renderer and input processing. Note that access to the terminal state is
-        // synchronized since the I/O loop updates the state, and the display
-        // consumes it periodically.
-        let event_loop = PtyEventLoop::new(
-            Arc::clone(&terminal),
-            event_proxy.clone(),
-            pty,
-            pty_config.drain_on_exit,
-            config.debug.ref_test,
-        )?;
-
-        // The event loop channel allows write requests from the event processor
-        // to be sent to the pty loop and ultimately written to the pty.
-        let loop_tx = event_loop.channel();
-
-        // Kick off the I/O thread.
-        let _io_thread = event_loop.spawn();
-
-        // Start cursor blinking, in case `Focused` isn't sent on startup.
-        if config.cursor.style().blinking {
-            event_proxy.send_event(TerminalEvent::CursorBlinkingChange.into());
-        }
-
-        // Create context for the Alacritty window.
-        Ok(WindowContext {
+        let mut window_context = Self {
             preserve_title,
-            terminal,
             display,
-            #[cfg(not(windows))]
-            master_fd,
-            #[cfg(not(windows))]
-            shell_pid,
+            panes,
+            layout,
+            geometry: LayoutGeometry { leaves: Vec::new(), bars: Vec::new() },
+            focused: pane_id,
+            split_drag: None,
+            pending_pane_op: None,
+            closing: false,
             config,
-            notifier: Notifier(loop_tx),
-            cursor_blink_timed_out: Default::default(),
             prev_bell_cmd: Default::default(),
-            inline_search_state: Default::default(),
-            message_buffer: Default::default(),
             window_config: Default::default(),
-            search_state: Default::default(),
             event_queue: Default::default(),
             modifiers: Default::default(),
             occluded: Default::default(),
             mouse: Default::default(),
             touch: Default::default(),
             dirty: Default::default(),
-        })
+        };
+        window_context.relayout_panes();
+
+        Ok(window_context)
     }
 
-    /// Update the terminal window to the latest config.
     pub fn update_config(&mut self, new_config: Rc<UiConfig>) {
         let old_config = mem::replace(&mut self.config, new_config);
 
-        // Apply ipc config if there are overrides.
         self.config = self.window_config.override_config_rc(self.config.clone());
 
         self.display.update_config(&self.config);
-        self.terminal.lock().set_options(self.config.term_options());
+        for pane in self.panes.values_mut() {
+            pane.terminal.lock().set_options(self.config.term_options());
+        }
 
-        // Reload cursor if its thickness has changed.
         if (old_config.cursor.thickness() - self.config.cursor.thickness()).abs() > f32::EPSILON {
             self.display.pending_update.set_cursor_dirty();
         }
 
         if old_config.font != self.config.font {
             let scale_factor = self.display.window.scale_factor as f32;
-            // Do not update font size if it has been changed at runtime.
             if self.display.font_size == old_config.font.size().scale(scale_factor) {
                 self.display.font_size = self.config.font.size().scale(scale_factor);
             }
@@ -283,10 +241,8 @@ impl WindowContext {
             self.display.pending_update.set_font(font);
         }
 
-        // Always reload the theme to account for auto-theme switching.
         self.display.window.set_theme(self.config.window.theme());
 
-        // Update display if either padding options or resize increments were changed.
         let window_config = &old_config.window;
         if window_config.padding(1.) != self.config.window.padding(1.)
             || window_config.dynamic_padding != self.config.window.dynamic_padding
@@ -295,13 +251,6 @@ impl WindowContext {
             self.display.pending_update.dirty = true;
         }
 
-        // Update title on config reload according to the following table.
-        //
-        // │cli │ dynamic_title │ current_title == old_config ││ set_title │
-        // │ Y  │       _       │              _              ││     N     │
-        // │ N  │       Y       │              Y              ││     Y     │
-        // │ N  │       Y       │              N              ││     N     │
-        // │ N  │       N       │              _              ││     Y     │
         if !self.preserve_title
             && (!self.config.window.dynamic_title
                 || self.display.window.title() == old_config.window.identity.title)
@@ -311,58 +260,70 @@ impl WindowContext {
 
         let opaque = self.config.window_opacity() >= 1.;
 
-        // Disable shadows for transparent windows on macOS.
         #[cfg(target_os = "macos")]
         self.display.window.set_has_shadow(opaque);
 
         #[cfg(target_os = "macos")]
         self.display.window.set_option_as_alt(self.config.window.option_as_alt());
 
-        // Change opacity and blur state.
         self.display.window.set_transparent(!opaque);
         self.display.window.set_blur(self.config.window.blur);
 
-        // Update hint keys.
         self.display.hint_state.update_alphabet(self.config.hints.alphabet());
 
-        // Update cursor blinking.
         let event = Event::new(TerminalEvent::CursorBlinkingChange.into(), None);
         self.event_queue.push(event.into());
 
         self.dirty = true;
     }
 
-    /// Get reference to the window's configuration.
     #[cfg(unix)]
     pub fn config(&self) -> &UiConfig {
         &self.config
     }
 
-    /// Clear the window config overrides.
+    pub fn has_messages(&self) -> bool {
+        self.panes.values().any(|pane| !pane.message_buffer.is_empty())
+    }
+
+    pub fn remove_message_target(&mut self, target: &str) {
+        for pane in self.panes.values_mut() {
+            pane.message_buffer.remove_target(target);
+        }
+    }
+
     #[cfg(unix)]
     pub fn reset_window_config(&mut self, config: Rc<UiConfig>) {
-        // Clear previous window errors.
-        self.message_buffer.remove_target(LOG_TARGET_IPC_CONFIG);
-
+        self.remove_message_target(LOG_TARGET_IPC_CONFIG);
         self.window_config.clear();
-
-        // Reload current config to pull new IPC config.
         self.update_config(config);
     }
 
-    /// Add new window config overrides.
     #[cfg(unix)]
     pub fn add_window_config(&mut self, config: Rc<UiConfig>, options: &ParsedOptions) {
-        // Clear previous window errors.
-        self.message_buffer.remove_target(LOG_TARGET_IPC_CONFIG);
-
+        self.remove_message_target(LOG_TARGET_IPC_CONFIG);
         self.window_config.extend_from_slice(options);
-
-        // Reload current config to pull new IPC config.
         self.update_config(config);
     }
 
-    /// Draw the window.
+    /// Close a pane. Returns `true` if the window still has remaining panes.
+    pub fn close_pane(&mut self, pane_id: Option<PaneId>) -> bool {
+        let id = pane_id.unwrap_or(self.focused);
+        match self.layout.close(id) {
+            Some(focus) => {
+                self.panes.remove(&id);
+                self.focused = focus;
+                self.split_drag = None;
+                if let Some(pane) = self.panes.get(&focus) {
+                    pane.terminal.lock().is_focused = true;
+                }
+                self.relayout_panes();
+                true
+            },
+            None => false,
+        }
+    }
+
     pub fn draw(&mut self, scheduler: &mut Scheduler) {
         self.display.window.requested_redraw = false;
 
@@ -372,13 +333,9 @@ impl WindowContext {
 
         self.dirty = false;
 
-        // Force the display to process any pending display update.
         self.display.process_renderer_update();
 
-        // Request immediate re-draw if visual bell animation is not finished yet.
         if !self.display.visual_bell.completed() {
-            // We can get an OS redraw which bypasses alacritty's frame throttling, thus
-            // marking the window as dirty when we don't have frame yet.
             if self.display.window.has_frame {
                 self.display.window.request_redraw();
             } else {
@@ -386,18 +343,30 @@ impl WindowContext {
             }
         }
 
-        // Redraw the window.
-        let terminal = self.terminal.lock();
-        self.display.draw(
-            terminal,
-            scheduler,
-            &self.message_buffer,
-            &self.config,
-            &mut self.search_state,
-        );
+        let window_height = self.display.size_info.height();
+        self.display.begin_frame(&self.config);
+
+        let geometry = self.geometry.clone();
+        for leaf in &geometry.leaves {
+            let Some(pane) = self.panes.get_mut(&leaf.id) else {
+                continue;
+            };
+            let terminal = pane.terminal.lock();
+            self.display.draw(
+                terminal,
+                &pane.message_buffer,
+                &self.config,
+                &mut pane.search_state,
+                pane.size,
+                leaf.rect,
+                window_height,
+            );
+        }
+
+        self.display.paint_split_bars(&geometry.bars, &self.config);
+        self.display.end_frame(scheduler, &self.config);
     }
 
-    /// Process events for this terminal window.
     pub fn handle_event(
         &mut self,
         #[cfg(target_os = "macos")] event_loop: &ActiveEventLoop,
@@ -409,12 +378,9 @@ impl WindowContext {
         match event {
             WinitEvent::AboutToWait
             | WinitEvent::WindowEvent { event: WindowEvent::RedrawRequested, .. } => {
-                // Skip further event handling with no staged updates.
                 if self.event_queue.is_empty() {
                     return;
                 }
-
-                // Continue to process all pending events.
             },
             event => {
                 self.event_queue.push(event);
@@ -422,68 +388,24 @@ impl WindowContext {
             },
         }
 
-        let mut terminal = self.terminal.lock();
+        let events: Vec<_> = self.event_queue.drain(..).collect();
+        for event in events {
+            if self.consume_layout_event(&event) {
+                continue;
+            }
 
-        let old_is_searching = self.search_state.history_index.is_some();
-
-        let context = ActionContext {
-            cursor_blink_timed_out: &mut self.cursor_blink_timed_out,
-            prev_bell_cmd: &mut self.prev_bell_cmd,
-            message_buffer: &mut self.message_buffer,
-            inline_search_state: &mut self.inline_search_state,
-            search_state: &mut self.search_state,
-            modifiers: &mut self.modifiers,
-            notifier: &mut self.notifier,
-            display: &mut self.display,
-            mouse: &mut self.mouse,
-            touch: &mut self.touch,
-            dirty: &mut self.dirty,
-            occluded: &mut self.occluded,
-            terminal: &mut terminal,
-            #[cfg(not(windows))]
-            master_fd: self.master_fd,
-            #[cfg(not(windows))]
-            shell_pid: self.shell_pid,
-            preserve_title: self.preserve_title,
-            config: &self.config,
-            event_proxy,
-            #[cfg(target_os = "macos")]
-            event_loop,
-            clipboard,
-            scheduler,
-        };
-        let mut processor = input::Processor::new(context);
-
-        for event in self.event_queue.drain(..) {
-            processor.handle_event(event);
-        }
-
-        // Process DisplayUpdate events.
-        if self.display.pending_update.dirty {
-            Self::submit_display_update(
-                &mut terminal,
-                &mut self.display,
-                &mut self.notifier,
-                &self.message_buffer,
-                &mut self.search_state,
-                old_is_searching,
-                &self.config,
+            self.process_terminal_event(
+                #[cfg(target_os = "macos")]
+                event_loop,
+                event_proxy,
+                clipboard,
+                scheduler,
+                event,
             );
-            self.dirty = true;
+
+            self.apply_pending_op(event_proxy);
         }
 
-        if self.dirty || self.mouse.hint_highlight_dirty {
-            self.dirty |= self.display.update_highlighted_hints(
-                &terminal,
-                &self.config,
-                &self.mouse,
-                self.modifiers.state(),
-            );
-            self.mouse.hint_highlight_dirty = false;
-        }
-
-        // Don't call `request_redraw` when event is `RedrawRequested` since the `dirty` flag
-        // represents the current frame, but redraw is for the next frame.
         if self.dirty
             && self.display.window.has_frame
             && !self.occluded
@@ -493,21 +415,313 @@ impl WindowContext {
         }
     }
 
-    /// ID of this terminal context.
+    fn process_terminal_event(
+        &mut self,
+        #[cfg(target_os = "macos")] event_loop: &ActiveEventLoop,
+        event_proxy: &EventLoopProxy<Event>,
+        clipboard: &mut Clipboard,
+        scheduler: &mut Scheduler,
+        event: WinitEvent<Event>,
+    ) {
+        let focused = self.focused;
+        let Some(leaf) = self.geometry.leaf(focused).copied() else {
+            return;
+        };
+        let Some(pane) = self.panes.get_mut(&focused) else {
+            return;
+        };
+
+        let mut terminal = pane.terminal.lock();
+        let old_is_searching = pane.search_state.history_index.is_some();
+        let input_size = pane.size.with_origin(leaf.rect.x, leaf.rect.y);
+
+        {
+            let context = ActionContext {
+                cursor_blink_timed_out: &mut pane.cursor_blink_timed_out,
+                prev_bell_cmd: &mut self.prev_bell_cmd,
+                message_buffer: &mut pane.message_buffer,
+                inline_search_state: &mut pane.inline_search_state,
+                search_state: &mut pane.search_state,
+                modifiers: &mut self.modifiers,
+                notifier: &mut pane.notifier,
+                display: &mut self.display,
+                mouse: &mut self.mouse,
+                touch: &mut self.touch,
+                dirty: &mut self.dirty,
+                occluded: &mut self.occluded,
+                terminal: &mut terminal,
+                pending_pane_op: &mut self.pending_pane_op,
+                input_size,
+                #[cfg(not(windows))]
+                master_fd: pane.master_fd,
+                #[cfg(not(windows))]
+                shell_pid: pane.shell_pid,
+                preserve_title: self.preserve_title,
+                config: &self.config,
+                event_proxy,
+                #[cfg(target_os = "macos")]
+                event_loop,
+                clipboard,
+                scheduler,
+            };
+            let mut processor = input::Processor::new(context);
+            processor.handle_event(event);
+        }
+
+        if self.display.pending_update.dirty {
+            Self::submit_display_update(
+                &mut terminal,
+                &mut self.display,
+                &mut pane.notifier,
+                &pane.message_buffer,
+                &mut pane.search_state,
+                old_is_searching,
+                &self.config,
+            );
+            drop(terminal);
+            self.relayout_panes();
+        } else {
+            drop(terminal);
+            if old_is_searching
+                != self
+                    .panes
+                    .get(&focused)
+                    .is_some_and(|pane| pane.search_state.history_index.is_some())
+            {
+                self.relayout_panes();
+            }
+        }
+
+        if let Some(pane) = self.panes.get_mut(&focused) {
+            let terminal = pane.terminal.lock();
+            if self.dirty || self.mouse.hint_highlight_dirty {
+                let saved = self.display.size_info;
+                self.display.size_info = input_size;
+                self.dirty |= self.display.update_highlighted_hints(
+                    &terminal,
+                    &self.config,
+                    &self.mouse,
+                    self.modifiers.state(),
+                );
+                self.display.size_info = saved;
+                self.mouse.hint_highlight_dirty = false;
+            }
+        }
+    }
+
+    fn consume_layout_event(&mut self, event: &WinitEvent<Event>) -> bool {
+        match event {
+            WinitEvent::WindowEvent {
+                event: WindowEvent::CursorMoved { position, .. }, ..
+            } => {
+                let size_info = self.display.size_info;
+                let (x, y): (i32, i32) = (*position).into();
+                self.mouse.x = x.clamp(0, size_info.width() as i32 - 1) as usize;
+                self.mouse.y = y.clamp(0, size_info.height() as i32 - 1) as usize;
+
+                if let Some(drag) = self.split_drag {
+                    let bounds = content_bounds(&self.display.size_info);
+                    let metrics = self.layout_metrics();
+                    if self.layout.drag_split(drag.id, bounds, metrics, x as f32, y as f32) {
+                        self.relayout_panes();
+                    }
+                    self.display.window.set_mouse_cursor(resize_cursor(drag.axis));
+                    return true;
+                }
+
+                match self.layout.hit_test(
+                    content_bounds(&self.display.size_info),
+                    self.layout_metrics(),
+                    x as f32,
+                    y as f32,
+                ) {
+                    Some(Hit::Bar { axis, .. }) => {
+                        self.display.window.set_mouse_cursor(resize_cursor(axis));
+                        true
+                    },
+                    _ => false,
+                }
+            },
+            WinitEvent::WindowEvent {
+                event: WindowEvent::MouseInput { state, button, .. },
+                ..
+            } => {
+                if *button != MouseButton::Left {
+                    return false;
+                }
+
+                self.mouse.left_button_state = *state;
+
+                if *state == ElementState::Released {
+                    if self.split_drag.take().is_some() {
+                        self.relayout_panes();
+                        return true;
+                    }
+                    return false;
+                }
+
+                match self.layout.hit_test(
+                    content_bounds(&self.display.size_info),
+                    self.layout_metrics(),
+                    self.mouse.x as f32,
+                    self.mouse.y as f32,
+                ) {
+                    Some(Hit::Bar { id, axis }) => {
+                        self.split_drag = Some(SplitDrag { id, axis });
+                        self.display.window.set_mouse_cursor(resize_cursor(axis));
+                        true
+                    },
+                    Some(Hit::Pane(id)) => {
+                        self.set_focused(id);
+                        false
+                    },
+                    None => false,
+                }
+            },
+            _ => false,
+        }
+    }
+
+    fn apply_pending_op(&mut self, event_proxy: &EventLoopProxy<Event>) {
+        match self.pending_pane_op.take() {
+            Some(PendingPaneOp::Split(axis)) => {
+                let _ = self.split_focused(axis, event_proxy.clone());
+            },
+            Some(PendingPaneOp::Close) => {
+                if !self.close_pane(Some(self.focused)) {
+                    self.closing = true;
+                    if let Some(pane) = self.panes.get(&self.focused) {
+                        pane.terminal.lock().exit();
+                    }
+                }
+            },
+            Some(PendingPaneOp::Focus(direction)) => {
+                let bounds = content_bounds(&self.display.size_info);
+                if let Some(id) =
+                    self.layout.neighbor(bounds, self.layout_metrics(), self.focused, direction)
+                {
+                    self.set_focused(id);
+                }
+            },
+            Some(PendingPaneOp::QuitWindow) => {
+                self.closing = true;
+                if let Some(pane) = self.panes.get(&self.focused) {
+                    pane.terminal.lock().exit();
+                }
+            },
+            None => (),
+        }
+    }
+
+    fn split_focused(
+        &mut self,
+        axis: Axis,
+        proxy: EventLoopProxy<Event>,
+    ) -> Result<(), Box<dyn Error>> {
+        let focused = self.focused;
+        let Some(new_id) = self.layout.split(focused, axis) else {
+            return Ok(());
+        };
+
+        let mut pty_config = self.config.pty_config();
+        #[cfg(not(windows))]
+        if let Some(pane) = self.panes.get(&focused) {
+            pty_config.working_directory =
+                foreground_process_path(pane.master_fd, pane.shell_pid).ok();
+        }
+
+        let bounds = content_bounds(&self.display.size_info);
+        let geometry = self.layout.compute(bounds, self.layout_metrics());
+        let leaf = geometry.leaf(new_id).copied();
+        let size = leaf
+            .map(|leaf| {
+                SizeInfo::for_rect(
+                    leaf.rect.width,
+                    leaf.rect.height,
+                    self.display.size_info.cell_width(),
+                    self.display.size_info.cell_height(),
+                )
+            })
+            .unwrap_or(self.display.size_info);
+
+        let pane =
+            Pane::spawn(new_id, &self.config, size, self.display.window.id(), proxy, pty_config)?;
+        self.panes.insert(new_id, pane);
+        self.set_focused(new_id);
+        self.relayout_panes();
+        Ok(())
+    }
+
+    fn set_focused(&mut self, id: PaneId) {
+        if self.focused == id || !self.panes.contains_key(&id) {
+            return;
+        }
+
+        if let Some(pane) = self.panes.get(&self.focused) {
+            pane.terminal.lock().is_focused = false;
+        }
+        self.focused = id;
+        if let Some(pane) = self.panes.get(&id) {
+            pane.terminal.lock().is_focused = true;
+        }
+        self.dirty = true;
+    }
+
+    fn layout_metrics(&self) -> LayoutMetrics {
+        LayoutMetrics::from_cell_size(
+            self.display.size_info.cell_width(),
+            self.display.size_info.cell_height(),
+        )
+    }
+
+    fn relayout_panes(&mut self) {
+        let bounds = content_bounds(&self.display.size_info);
+        let metrics = self.layout_metrics();
+        self.geometry = self.layout.compute(bounds, metrics);
+
+        for leaf in &self.geometry.leaves {
+            let Some(pane) = self.panes.get_mut(&leaf.id) else {
+                continue;
+            };
+
+            let mut size = SizeInfo::for_rect(
+                leaf.rect.width,
+                leaf.rect.height,
+                metrics.cell_width,
+                metrics.cell_height,
+            );
+            let search_lines = usize::from(pane.search_state.history_index.is_some());
+            let message_lines =
+                pane.message_buffer.message().map_or(0, |message| message.text(&size).len());
+            size.reserve_lines(search_lines + message_lines);
+
+            if pane.size.screen_lines() != size.screen_lines()
+                || pane.size.columns() != size.columns()
+            {
+                pane.notifier.on_resize(size.into());
+                pane.terminal.lock().resize(size);
+            }
+            pane.size = size;
+        }
+
+        self.dirty = true;
+    }
+
     pub fn id(&self) -> WindowId {
         self.display.window.id()
     }
 
-    /// Write the ref test results to the disk.
     pub fn write_ref_test_results(&self) {
-        // Dump grid state.
-        let mut grid = self.terminal.lock().grid().clone();
+        let Some(pane) = self.panes.get(&self.focused) else {
+            return;
+        };
+        let mut grid = pane.terminal.lock().grid().clone();
         grid.initialize_all();
         grid.truncate();
 
         let serialized_grid = json::to_string(&grid).expect("serialize grid");
 
-        let size_info = &self.display.size_info;
+        let size_info = &pane.size;
         let size = TermSize::new(size_info.columns(), size_info.screen_lines());
         let serialized_size = json::to_string(&size).expect("serialize size");
 
@@ -526,17 +740,15 @@ impl WindowContext {
             .expect("write config.json");
     }
 
-    /// Submit the pending changes to the `Display`.
     fn submit_display_update(
-        terminal: &mut Term<EventProxy>,
+        terminal: &mut Term<crate::event::EventProxy>,
         display: &mut Display,
-        notifier: &mut Notifier,
+        notifier: &mut alacritty_terminal::event_loop::Notifier,
         message_buffer: &MessageBuffer,
         search_state: &mut SearchState,
         old_is_searching: bool,
         config: &UiConfig,
     ) {
-        // Compute cursor positions before resize.
         let num_lines = terminal.screen_lines();
         let cursor_at_bottom = terminal.grid().cursor.point.line + 1 == num_lines;
         let origin_at_bottom = if terminal.mode().contains(TermMode::VI) {
@@ -545,11 +757,10 @@ impl WindowContext {
             search_state.direction == Direction::Left
         };
 
-        display.handle_update(terminal, notifier, message_buffer, search_state, config);
+        display.handle_update(terminal, notifier, message_buffer, search_state, config, false);
 
         let new_is_searching = search_state.history_index.is_some();
         if !old_is_searching && new_is_searching {
-            // Scroll on search start to make sure origin is visible with minimal viewport motion.
             let display_offset = terminal.grid().display_offset();
             if display_offset == 0 && cursor_at_bottom && !origin_at_bottom {
                 terminal.scroll_display(Scroll::Delta(1));
@@ -560,9 +771,18 @@ impl WindowContext {
     }
 }
 
-impl Drop for WindowContext {
-    fn drop(&mut self) {
-        // Shutdown the terminal's PTY.
-        let _ = self.notifier.0.send(Msg::Shutdown);
+fn content_bounds(size: &SizeInfo) -> Rect {
+    Rect {
+        x: size.padding_x(),
+        y: size.padding_y(),
+        width: (size.width() - 2. * size.padding_x()).max(0.),
+        height: (size.height() - 2. * size.padding_y()).max(0.),
+    }
+}
+
+fn resize_cursor(axis: Axis) -> CursorIcon {
+    match axis {
+        Axis::Vertical => CursorIcon::ColResize,
+        Axis::Horizontal => CursorIcon::RowResize,
     }
 }

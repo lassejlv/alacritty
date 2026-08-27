@@ -436,6 +436,34 @@ configuration. See *alacritty*(5) for full configuration format documentation.
 :  _"Control"_
 :[
 :  _"DecreaseFontSize"_
+|  _"D"_
+:  _"Control|Shift"_
+:[
+:  _"SplitRight"_
+|  _"D"_
+:  _"Control|Shift|Alt"_
+:[
+:  _"SplitDown"_
+|  _"W"_
+:  _"Control|Shift"_
+:[
+:  _"ClosePane"_
+|  _"Left"_
+:  _"Control|Alt"_
+:[
+:  _"FocusPaneLeft"_
+|  _"Right"_
+:  _"Control|Alt"_
+:[
+:  _"FocusPaneRight"_
+|  _"Up"_
+:  _"Control|Alt"_
+:[
+:  _"FocusPaneUp"_
+|  _"Down"_
+:  _"Control|Alt"_
+:[
+:  _"FocusPaneDown"_
 
 ## Windows only
 
@@ -526,6 +554,34 @@ configuration. See *alacritty*(5) for full configuration format documentation.
 :  _"Command"_
 :[
 :  _"CreateNewWindow"_
+|  _"D"_
+:  _"Command"_
+:[
+:  _"SplitRight"_
+|  _"D"_
+:  _"Command|Shift"_
+:[
+:  _"SplitDown"_
+|  _"W"_
+:  _"Command|Shift"_
+:[
+:  _"ClosePane"_
+|  _"Left"_
+:  _"Command|Alt"_
+:[
+:  _"FocusPaneLeft"_
+|  _"Right"_
+:  _"Command|Alt"_
+:[
+:  _"FocusPaneRight"_
+|  _"Up"_
+:  _"Command|Alt"_
+:[
+:  _"FocusPaneUp"_
+|  _"Down"_
+:  _"Command|Alt"_
+:[
+:  _"FocusPaneDown"_
 |  _"T"_
 :  _"Command"_
 :[
