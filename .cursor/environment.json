@@ -1,0 +1,4 @@
+{
+  "name": "Alacritty (Rust)",
+  "install": "./scripts/cloud-agent-setup.sh"
+}
