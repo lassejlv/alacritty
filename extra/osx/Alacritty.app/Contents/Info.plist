@@ -24,6 +24,8 @@
   <string>1</string>
   <key>CFBundleIconFile</key>
   <string>alacritty.icns</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>27.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSMainNibFile</key>

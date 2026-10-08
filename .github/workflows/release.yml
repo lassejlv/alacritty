@@ -1,94 +1,80 @@
 name: Release
 
 on:
-  push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  release:
+    # published also covers prereleases published from drafts.
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.id || github.ref }}
+  cancel-in-progress: false
 
 env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   CARGO_TERM_COLOR: always
 
 jobs:
   macos:
-    runs-on: macos-latest
-
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease
+    runs-on: xcode-27
+    timeout-minutes: 90
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '27.0'
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: brew install scdoc
-      - name: Install ARM target
-        run: rustup update && rustup target add aarch64-apple-darwin && rustup target add x86_64-apple-darwin
-      - name: Test
-        run: cargo test --release --target=x86_64-apple-darwin
-      - name: Build ARM
-        run: cargo build --release --target=aarch64-apple-darwin
-      - name: Make DMG
-        run: make dmg-universal
-      - name: Upload Application
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install dependencies and Rust targets
         run: |
-          mv ./target/release/osx/Alacritty.dmg ./Alacritty-${GITHUB_REF##*/}.dmg
-          ./.github/workflows/upload_asset.sh ./Alacritty-${GITHUB_REF##*/}.dmg $GITHUB_TOKEN
+          brew install scdoc
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Test native architecture
+        run: cargo test --locked --release
+      - name: Build universal app
+        run: make app-universal
+      - name: Import Apple credentials
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: bash scripts/release/macos-signing-setup.sh
+      - name: Sign, notarize, staple, and verify
+        run: bash scripts/release/macos-package.sh
+      - name: Upload signed downloads
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-macos
+          path: dist/*
+          if-no-files-found: error
+      - name: Remove Apple credentials
+        if: always()
+        run: bash scripts/release/macos-signing-cleanup.sh
 
-  windows:
-    runs-on: windows-latest
-
-    defaults:
-      run:
-        shell: bash
-
+  publish:
+    if: github.event_name == 'release' && github.event.release.prerelease
+    needs: [macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Test
-        run: cargo test --release
-      - name: Build
-        run: cargo build --release
-      - name: Upload portable executable
-        run: |
-          cp ./target/release/alacritty.exe ./Alacritty-${GITHUB_REF##*/}-portable.exe
-          ./.github/workflows/upload_asset.sh \
-            ./Alacritty-${GITHUB_REF##*/}-portable.exe $GITHUB_TOKEN
-      - name: Install WiX
-        run: dotnet tool install --global wix --version 4.0.5
-      - name: Create msi installer
-        run: |
-          wix extension add WixToolset.UI.wixext/4.0.5 WixToolset.Util.wixext/4.0.5
-          wix build -arch "x64" -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext \
-          -out "./Alacritty-${GITHUB_REF##*/}-installer.msi" "alacritty/windows/wix/alacritty.wxs"
-      - name: Upload msi installer
-        run: |
-          ./.github/workflows/upload_asset.sh \
-            ./Alacritty-${GITHUB_REF##*/}-installer.msi $GITHUB_TOKEN
-
-  linux:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install cmake pkg-config libfreetype6-dev libfontconfig1-dev \
-            libxcb-xfixes0-dev libxkbcommon-dev python3 scdoc
-      - name: Test
-        run: cargo test --release
-      - name: Generate manpages
-        run: |
-          scdoc < extra/man/alacritty.1.scd | gzip -c > "./alacritty.1.gz"
-          scdoc < extra/man/alacritty-msg.1.scd | gzip -c > "./alacritty-msg.1.gz"
-          scdoc < extra/man/alacritty.5.scd | gzip -c > "./alacritty.5.gz"
-          scdoc < extra/man/alacritty-bindings.5.scd | gzip -c > "./alacritty-bindings.5.gz"
-          scdoc < extra/man/alacritty-escapes.7.scd | gzip -c > "./alacritty-escapes.7.gz"
-      - name: Upload Assets
-        run: |
-          mv ./extra/logo/alacritty-term.svg ./Alacritty.svg
-          ./.github/workflows/upload_asset.sh ./Alacritty.svg $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./alacritty.1.gz $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./alacritty-msg.1.gz $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./alacritty.5.gz $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./alacritty-bindings.5.gz $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./alacritty-escapes.7.gz $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./extra/completions/alacritty.bash $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./extra/completions/alacritty.fish $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./extra/completions/_alacritty $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./extra/linux/Alacritty.desktop $GITHUB_TOKEN
-          ./.github/workflows/upload_asset.sh ./extra/alacritty.info $GITHUB_TOKEN
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-macos
+          path: dist
+      - name: Verify checksums, attach assets, and promote to Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: bash scripts/release/publish.sh
