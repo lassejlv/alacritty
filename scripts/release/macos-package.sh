@@ -6,7 +6,7 @@ done
 app=target/release/osx/Alacritty.app
 binary="$app/Contents/MacOS/alacritty"
 [[ -x "$binary" ]] || { echo 'Build the universal app first.' >&2; exit 1; }
-lipo -verify_arch arm64 x86_64 "$binary"
+lipo "$binary" -verify_arch arm64 x86_64
 work=$(mktemp -d "$RUNNER_TEMP/alacritty-package.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p dist
