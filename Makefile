@@ -40,6 +40,7 @@ $(TARGET)-native:
 $(TARGET)-universal:
 	MACOSX_DEPLOYMENT_TARGET="27.0" cargo build --locked --release --target=x86_64-apple-darwin
 	MACOSX_DEPLOYMENT_TARGET="27.0" cargo build --locked --release --target=aarch64-apple-darwin
+	@mkdir -p $(RELEASE_DIR)
 	@lipo target/{x86_64,aarch64}-apple-darwin/release/$(TARGET) -create -output $(APP_BINARY)
 
 app: $(APP_NAME)-native ## Create an Alacritty.app
