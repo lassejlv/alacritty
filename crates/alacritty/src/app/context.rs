@@ -10,9 +10,13 @@ use std::time::{Duration, Instant};
 use std::{env, f32, mem};
 
 use crossfont::Size as FontSize;
-use log::{debug, error, warn};
+#[cfg(target_os = "macos")]
+use log::error;
+use log::{debug, warn};
 use winit::event::{ElementState, Modifiers};
-use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
+#[cfg(target_os = "macos")]
+use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::EventLoopProxy;
 
 use alacritty_terminal::event::{EventListener, Notify};
 use alacritty_terminal::grid::{BidirectionalIterator, Dimensions, Scroll};
@@ -25,9 +29,12 @@ use alacritty_terminal::term::{ClipboardType, Term, TermMode};
 use crate::app::scheduler::{Scheduler, TimerId, Topic};
 use crate::cli::WindowOptions;
 use crate::clipboard::Clipboard;
+#[cfg(target_os = "macos")]
+use crate::config;
+use crate::config::UiConfig;
 use crate::config::ui_config::{HintAction, HintInternalAction};
-use crate::config::{self, UiConfig};
 use crate::input::{self, ActionContext as _};
+#[cfg(target_os = "macos")]
 use crate::logging::LOG_TARGET_CONFIG;
 #[cfg(not(windows))]
 use crate::platform::process::foreground_process_path;
