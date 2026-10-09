@@ -66,6 +66,7 @@ pub struct Parser<const OSC_RAW_BUF_SIZE: usize = MAX_OSC_RAW> {
     osc_raw: Vec<u8>,
     osc_params: [(usize, usize); MAX_OSC_PARAMS],
     osc_num_params: usize,
+    osc_truncated: bool,
     apc_truncated: bool,
     ignoring: bool,
     partial_utf8: [u8; 4],
@@ -182,6 +183,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
             State::Escape => self.advance_esc(performer, byte),
             State::EscapeIntermediate => self.advance_esc_intermediate(performer, byte),
             State::OscString => self.advance_osc_string(performer, byte),
+            State::OscEscape => self.advance_osc_escape(performer, byte),
             State::ApcString => self.advance_apc(performer, byte),
             State::ApcEscape => self.advance_apc_escape(performer, byte),
             State::SosPmApcString => self.anywhere(performer, byte),
@@ -377,6 +379,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
             0x5D => {
                 self.osc_raw.clear();
                 self.osc_num_params = 0;
+                self.osc_truncated = false;
                 self.state = State::OscString
             },
             0x5E => self.state = State::SosPmApcString,
@@ -412,17 +415,28 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
     #[inline(always)]
     fn advance_osc_string<P: Perform>(&mut self, performer: &mut P, byte: u8) {
         match byte {
-            0x00..=0x06 | 0x08..=0x17 | 0x19 | 0x1C..=0x1F => (),
+            0x00..=0x06 | 0x08..=0x17 | 0x19 | 0x1C..=0x1F => {
+                if self.is_clipboard_osc() {
+                    self.osc_truncated = true;
+                }
+            },
             0x07 => {
                 self.osc_end(performer, byte);
                 self.state = State::Ground
             },
             0x18 | 0x1A => {
+                if self.is_clipboard_osc() {
+                    self.osc_truncated = true;
+                }
                 self.osc_end(performer, byte);
                 performer.execute(byte);
                 self.state = State::Ground
             },
             0x1B => {
+                if self.is_clipboard_osc() {
+                    self.state = State::OscEscape;
+                    return;
+                }
                 self.osc_end(performer, byte);
                 self.reset_params();
                 self.state = State::Escape
@@ -437,6 +451,24 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
                 self.action_osc_put_param()
             },
             _ => self.action_osc_put(byte),
+        }
+    }
+
+    fn is_clipboard_osc(&self) -> bool {
+        self.osc_num_params > 0 && self.osc_params[0] == (0, 4) && self.osc_raw.starts_with(b"5522")
+    }
+
+    fn advance_osc_escape<P: Perform>(&mut self, performer: &mut P, byte: u8) {
+        if byte == b'\\' {
+            self.osc_end(performer, byte);
+            self.state = State::Ground;
+        } else {
+            // An incomplete clipboard packet must never commit a staged write.
+            self.osc_truncated = true;
+            self.osc_end(performer, byte);
+            self.reset_params();
+            self.state = State::Escape;
+            self.advance_esc(performer, byte);
         }
     }
 
@@ -600,6 +632,12 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
 
     #[inline(always)]
     fn action_osc_put(&mut self, byte: u8) {
+        // Clipboard chunks are at most 4096 decoded bytes. Bound their metadata
+        // and encoded payload without changing the limits of other OSC commands.
+        if self.is_clipboard_osc() && self.osc_raw.len() >= 64 * 1024 {
+            self.osc_truncated = true;
+            return;
+        }
         #[cfg(not(feature = "std"))]
         {
             if self.osc_raw.is_full() {
@@ -642,7 +680,11 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
         unsafe {
             let num_params = self.osc_num_params;
             let params = &slices[..num_params] as *const [MaybeUninit<&[u8]>] as *const [&[u8]];
-            performer.osc_dispatch(&*params, byte == 0x07);
+            if self.osc_truncated {
+                performer.osc_dispatch_oversized(&*params, byte == 0x07);
+            } else {
+                performer.osc_dispatch(&*params, byte == 0x07);
+            }
         }
     }
 
@@ -803,6 +845,7 @@ enum State {
     Escape,
     EscapeIntermediate,
     OscString,
+    OscEscape,
     SosPmApcString,
     ApcString,
     ApcEscape,
@@ -861,6 +904,9 @@ pub trait Perform {
 
     /// Dispatch an operating system command.
     fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {}
+
+    /// An OSC clipboard packet was invalidated or exceeded its bounded buffer.
+    fn osc_dispatch_oversized(&mut self, _params: &[&[u8]], _bell_terminated: bool) {}
 
     /// A final character has arrived for a CSI sequence
     ///

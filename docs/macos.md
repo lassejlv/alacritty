@@ -80,6 +80,13 @@ If Ghostty loads multiple independent root configs, select the desired root
 file explicitly; its includes are imported with it. Ghostty files are left
 unchanged.
 
+## Clipboard formats
+
+Terminal applications can use the [Kitty clipboard protocol](kitty-clipboard.md)
+to copy and paste text, images, HTML, and other MIME formats. Clipboard access
+uses the existing `terminal.osc52` policy. The Paste shortcut and native menu
+also support MIME paste notifications when requested by the application.
+
 ## Inline images
 
 Kitty graphics clients can display images and animations inside any tab or split
