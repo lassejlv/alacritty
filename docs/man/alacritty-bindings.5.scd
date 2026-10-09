@@ -394,6 +394,18 @@ keyboard reporting modes. User key bindings can override them.
 :[ *mods*
 :[ *mode*
 :[ *action*
+|  _"Enter"_
+:  _"Control|Shift"_
+:[
+:  _"TogglePaneMaximized"_
+|  _"ArrowUp"_
+:  _"Control|Shift"_
+:  _"~Alt|~Search"_
+:  _"PreviousPrompt"_
+|  _"ArrowDown"_
+:  _"Control|Shift"_
+:  _"~Alt|~Search"_
+:  _"NextPrompt"_
 |  _"V"_
 :  _"Control|Shift"_
 :  _"~Vi"_
@@ -464,6 +476,18 @@ keyboard reporting modes. User key bindings can override them.
 :[ *mods*
 :[ *mode*
 :[ *action* / *chars*
+|  _"Enter"_
+:  _"Command|Shift"_
+:[
+:  _"TogglePaneMaximized"_
+|  _"ArrowUp"_
+:  _"Command|Shift"_
+:  _"~Alt|~Search"_
+:  _"PreviousPrompt"_
+|  _"ArrowDown"_
+:  _"Command|Shift"_
+:  _"~Alt|~Search"_
+:  _"NextPrompt"_
 |  _","_
 :  _"Command"_
 :[

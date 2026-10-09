@@ -227,6 +227,15 @@ brevity.
 |  _OSC 8_
 :  Implemented
 :[
+|  _OSC 7_
+:  Implemented
+:[ Shell working directory as a file URI
+|  _OSC 9 ; 4_
+:  Implemented
+:[ Normal, error, indeterminate, paused and hidden progress states
+|  _OSC 99_
+:  Implemented
+:[ Desktop notifications; query supported options with _p=?_
 |  _OSC 10_
 :  Implemented
 :[
@@ -245,9 +254,9 @@ brevity.
 |  _OSC 7501_
 :  Implemented
 :[ Program status reports and feature detection
-|  _OSC 133 ; A_
+|  _OSC 133_
 :  Implemented
-:[ Clears working and blocked program status records at the shell prompt
+:[ A/B/C/D shell markers, command exit status, navigation and output extraction
 |  _OSC 104_
 :  Implemented
 :[

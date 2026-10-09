@@ -124,6 +124,12 @@ pub enum Action {
     /// Store current selection into selection buffer.
     CopySelection,
 
+    /// Copy the output of the most recently completed shell command.
+    CopyLastCommandOutput,
+    SelectLastCommandOutput,
+    PreviousPrompt,
+    NextPrompt,
+
     /// Paste contents of selection buffer.
     PasteSelection,
 
@@ -228,6 +234,8 @@ pub enum Action {
     SplitDown,
     FocusNextPane,
     FocusPreviousPane,
+    /// Maximize the focused pane or restore its split layout.
+    TogglePaneMaximized,
     ClosePane,
 
     /// Create new window in a tab.
@@ -555,8 +563,19 @@ pub fn default_key_bindings() -> Vec<KeyBinding> {
     #[cfg(target_os = "macos")]
     bindings.extend(bindings!(
         KeyBinding;
+        Enter, ModifiersState::SUPER | ModifiersState::SHIFT; Action::TogglePaneMaximized;
+        ArrowUp, ModifiersState::SUPER | ModifiersState::SHIFT, ~BindingMode::ALT_SCREEN, ~BindingMode::SEARCH; Action::PreviousPrompt;
+        ArrowDown, ModifiersState::SUPER | ModifiersState::SHIFT, ~BindingMode::ALT_SCREEN, ~BindingMode::SEARCH; Action::NextPrompt;
         Backspace, ModifiersState::SUPER, ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::ALT_SCREEN, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x01\x0b".into());
         Delete,    ModifiersState::SUPER, ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::ALT_SCREEN, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x01\x0b".into());
+    ));
+
+    #[cfg(not(target_os = "macos"))]
+    bindings.extend(bindings!(
+        KeyBinding;
+        Enter, ModifiersState::CONTROL | ModifiersState::SHIFT; Action::TogglePaneMaximized;
+        ArrowUp, ModifiersState::CONTROL | ModifiersState::SHIFT, ~BindingMode::ALT_SCREEN, ~BindingMode::SEARCH; Action::PreviousPrompt;
+        ArrowDown, ModifiersState::CONTROL | ModifiersState::SHIFT, ~BindingMode::ALT_SCREEN, ~BindingMode::SEARCH; Action::NextPrompt;
     ));
 
     bindings.extend(platform_key_bindings());
@@ -1279,6 +1298,35 @@ mod tests {
     use super::*;
 
     use winit::keyboard::ModifiersState;
+
+    #[test]
+    fn pane_maximization_shortcut_works_in_terminal_and_application_modes() {
+        let bindings = default_key_bindings();
+        let platform_modifier =
+            if cfg!(target_os = "macos") { ModifiersState::SUPER } else { ModifiersState::CONTROL };
+        for mode in [BindingMode::empty(), BindingMode::all()] {
+            let trigger = BindingKey::Keycode {
+                key: Key::Named(NamedKey::Enter),
+                location: KeyLocation::Standard,
+            };
+            let actions: Vec<_> = bindings
+                .iter()
+                .filter(|binding| {
+                    binding.is_triggered_by(
+                        mode,
+                        platform_modifier | ModifiersState::SHIFT,
+                        &trigger,
+                    )
+                })
+                .map(|binding| &binding.action)
+                .collect();
+            assert_eq!(actions, [&Action::TogglePaneMaximized]);
+            assert!(!bindings.iter().any(|binding| {
+                binding.is_triggered_by(mode, ModifiersState::empty(), &trigger)
+                    && binding.action == Action::TogglePaneMaximized
+            }));
+        }
+    }
 
     #[test]
     fn line_delete_shortcuts_send_beginning_then_kill_line() {

@@ -133,6 +133,8 @@ pub struct CellExtra {
     zerowidth: ArrayVec<char, MAX_ZEROWIDTH_CHARS>,
     underline_color: Option<Color>,
     hyperlink: Option<Hyperlink>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    shell_markers: Option<crate::protocols::shell::Markers>,
 }
 
 /// Content and attributes of a single cell in the terminal grid.
@@ -160,6 +162,42 @@ impl Default for Cell {
 }
 
 impl Cell {
+    pub fn shell_markers(&self) -> Option<crate::protocols::shell::Markers> {
+        self.extra.as_ref()?.shell_markers
+    }
+
+    pub fn set_shell_markers(&mut self, markers: crate::protocols::shell::Markers) {
+        let extra = self.extra.get_or_insert(Default::default());
+        Arc::make_mut(extra).shell_markers = Some(markers);
+    }
+
+    pub fn clear_shell_markers(&mut self, id: u64) {
+        let Some(extra) = self.extra.as_mut() else { return };
+        if extra.shell_markers.is_none() {
+            return;
+        }
+        let extra = Arc::make_mut(extra);
+        if let Some(markers) = &mut extra.shell_markers {
+            for anchor in
+                [&mut markers.prompt, &mut markers.input, &mut markers.output, &mut markers.end]
+            {
+                if anchor.is_some_and(|anchor| anchor.id == id) {
+                    *anchor = None;
+                }
+            }
+            if *markers == Default::default() {
+                extra.shell_markers = None;
+            }
+        }
+        if extra.shell_markers.is_none()
+            && extra.zerowidth.is_empty()
+            && extra.underline_color.is_none()
+            && extra.hyperlink.is_none()
+        {
+            self.extra = None;
+        }
+    }
+
     /// Zerowidth characters stored in this cell.
     #[inline]
     pub fn zerowidth(&self) -> Option<&[char]> {
@@ -187,10 +225,11 @@ impl Cell {
     pub fn set_underline_color(&mut self, color: Option<Color>) {
         // If we reset color and we don't have zerowidth we should drop extra storage.
         if color.is_none()
-            && self
-                .extra
-                .as_ref()
-                .is_none_or(|extra| extra.zerowidth.is_empty() && extra.hyperlink.is_none())
+            && self.extra.as_ref().is_none_or(|extra| {
+                extra.zerowidth.is_empty()
+                    && extra.hyperlink.is_none()
+                    && extra.shell_markers.is_none()
+            })
         {
             self.extra = None;
         } else {
@@ -208,10 +247,11 @@ impl Cell {
     /// Set hyperlink.
     pub fn set_hyperlink(&mut self, hyperlink: Option<Hyperlink>) {
         let should_drop = hyperlink.is_none()
-            && self
-                .extra
-                .as_ref()
-                .is_none_or(|extra| extra.zerowidth.is_empty() && extra.underline_color.is_none());
+            && self.extra.as_ref().is_none_or(|extra| {
+                extra.zerowidth.is_empty()
+                    && extra.underline_color.is_none()
+                    && extra.shell_markers.is_none()
+            });
 
         if should_drop {
             self.extra = None;
@@ -243,6 +283,7 @@ impl GridCell for Cell {
                     | Flags::LEADING_WIDE_CHAR_SPACER,
             )
             && self.extra.as_ref().map(|extra| extra.zerowidth.is_empty()) != Some(false)
+            && self.shell_markers().is_none()
     }
 
     #[inline]

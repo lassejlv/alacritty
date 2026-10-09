@@ -20,6 +20,13 @@ pub enum Event {
 
     /// OSC 7501 records changed; presentation is chosen by the host.
     ProgramStatusChanged,
+    /// OSC 9;4 progress changed.
+    ProgressChanged,
+    DesktopNotification {
+        body: Vec<u8>,
+        truncated: bool,
+    },
+    NotificationsReset,
 
     /// Reset to the default window title.
     ResetTitle,
@@ -82,6 +89,9 @@ impl Debug for Event {
             Event::CursorBlinkingChange => write!(f, "CursorBlinkingChange"),
             Event::MouseCursorDirty => write!(f, "MouseCursorDirty"),
             Event::ProgramStatusChanged => write!(f, "ProgramStatusChanged"),
+            Event::ProgressChanged => write!(f, "ProgressChanged"),
+            Event::DesktopNotification { .. } => write!(f, "DesktopNotification"),
+            Event::NotificationsReset => write!(f, "NotificationsReset"),
             Event::ResetTitle => write!(f, "ResetTitle"),
             Event::Wakeup => write!(f, "Wakeup"),
             Event::Bell => write!(f, "Bell"),

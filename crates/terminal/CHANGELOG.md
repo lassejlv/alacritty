@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- OSC 7 file-URI directory state with local-host validation
+- OSC 133 semantic markers which follow grid reflow and scrollback, plus command status/output APIs
+- OSC 9;4 progress state and change events
+- OSC 99 bounded notification assembly, lifecycle handling, and host delivery events
+
 - OSC 7501 program status records, feature detection, and lifecycle handling
 
 ### Changed

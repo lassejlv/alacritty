@@ -34,6 +34,11 @@ pub enum Command {
     SplitDown,
     FocusNextPane,
     FocusPreviousPane,
+    TogglePaneMaximized,
+    PreviousPrompt,
+    NextPrompt,
+    CopyLastCommandOutput,
+    SelectLastCommandOutput,
     ClosePane,
     Quit,
     Copy,
@@ -63,6 +68,11 @@ impl Command {
             Self::SplitDown => Action::SplitDown,
             Self::FocusNextPane => Action::FocusNextPane,
             Self::FocusPreviousPane => Action::FocusPreviousPane,
+            Self::TogglePaneMaximized => Action::TogglePaneMaximized,
+            Self::PreviousPrompt => Action::PreviousPrompt,
+            Self::NextPrompt => Action::NextPrompt,
+            Self::CopyLastCommandOutput => Action::CopyLastCommandOutput,
+            Self::SelectLastCommandOutput => Action::SelectLastCommandOutput,
             Self::ClosePane => Action::ClosePane,
             Self::Quit => Action::Quit,
             Self::Copy => Action::Copy,
@@ -203,6 +213,8 @@ impl Menus {
         menus.add(&edit, "Copy", "c", cmd, Command::Copy);
         menus.add(&edit, "Paste", "v", cmd, Command::Paste);
         menus.add(&edit, "Select All", "a", cmd, Command::SelectAll);
+        menus.add(&edit, "Copy Last Command Output", "", cmd, Command::CopyLastCommandOutput);
+        menus.add(&edit, "Select Last Command Output", "", cmd, Command::SelectLastCommandOutput);
         edit.addItem(&NSMenuItem::separatorItem(mtm));
         menus.add(&edit, "Find…", "f", cmd, Command::SearchForward);
 
@@ -211,6 +223,9 @@ impl Menus {
         menus.add(&view, "Decrease Font Size", "-", cmd, Command::DecreaseFontSize);
         menus.add(&view, "Reset Font Size", "0", cmd, Command::ResetFontSize);
         view.addItem(&NSMenuItem::separatorItem(mtm));
+        menus.add(&view, "Maximize/Restore Pane", "\r", shift, Command::TogglePaneMaximized);
+        menus.add(&view, "Previous Command", "\u{f700}", shift, Command::PreviousPrompt);
+        menus.add(&view, "Next Command", "\u{f701}", shift, Command::NextPrompt);
         menus.add(&view, "Clear Scrollback", "", cmd, Command::ClearHistory);
         menus.add(&view, "Toggle Full Screen", "f", control, Command::ToggleFullscreen);
 
@@ -268,6 +283,8 @@ impl Menus {
         menus.add(&menu, "Copy", "c", cmd, Command::Copy);
         menus.add(&menu, "Paste", "v", cmd, Command::Paste);
         menus.add(&menu, "Select All", "a", cmd, Command::SelectAll);
+        menus.add(&menu, "Copy Last Command Output", "", cmd, Command::CopyLastCommandOutput);
+        menus.add(&menu, "Select Last Command Output", "", cmd, Command::SelectLastCommandOutput);
         menus.add(&menu, "Clear Selection", "", cmd, Command::ClearSelection);
         menu.addItem(&NSMenuItem::separatorItem(mtm));
         menus.add(&menu, "Find…", "f", cmd, Command::SearchForward);
@@ -275,6 +292,13 @@ impl Menus {
         menu.addItem(&NSMenuItem::separatorItem(mtm));
         menus.add(&menu, "Split Right", "d", cmd, Command::SplitRight);
         menus.add(&menu, "Split Down", "d", cmd | NSEventModifierFlags::Shift, Command::SplitDown);
+        menus.add(
+            &menu,
+            "Maximize/Restore Pane",
+            "\r",
+            cmd | NSEventModifierFlags::Shift,
+            Command::TogglePaneMaximized,
+        );
         menus.add(&menu, "New Tab", "t", cmd, Command::CreateNewTab);
         menus.add(&menu, "New Window", "n", cmd, Command::CreateNewWindow);
         for (item, command) in menus.items.iter().zip(menus.target.ivars().commands.borrow().iter())
@@ -331,6 +355,15 @@ impl Menus {
                             BindingKey::Keycode {
                                 key: Key::Named(NamedKey::ArrowLeft), ..
                             } => key == "\u{f702}",
+                            BindingKey::Keycode { key: Key::Named(NamedKey::Enter), .. } => {
+                                key == "\r"
+                            },
+                            BindingKey::Keycode { key: Key::Named(NamedKey::ArrowUp), .. } => {
+                                key == "\u{f700}"
+                            },
+                            BindingKey::Keycode {
+                                key: Key::Named(NamedKey::ArrowDown), ..
+                            } => key == "\u{f701}",
                             _ => false,
                         }
                 })

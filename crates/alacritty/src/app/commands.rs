@@ -46,6 +46,28 @@ impl<T: EventListener> Execute<T> for Action {
     #[inline]
     fn execute<A: ActionContext<T>>(&self, ctx: &mut A) {
         match self {
+            Action::PreviousPrompt | Action::NextPrompt => {
+                let direction = if matches!(self, Action::PreviousPrompt) {
+                    Direction::Left
+                } else {
+                    Direction::Right
+                };
+                ctx.terminal_mut().jump_to_prompt(direction);
+                ctx.mark_dirty();
+            },
+            Action::CopyLastCommandOutput => {
+                if let Some(output) = ctx.terminal().last_command_output() {
+                    ctx.clipboard_mut().store(ClipboardType::Clipboard, output);
+                }
+            },
+            Action::SelectLastCommandOutput => {
+                if let Some((start, end)) = ctx.terminal().last_command_output_range() {
+                    let mut selection = Selection::new(SelectionType::Simple, start, Side::Left);
+                    selection.update(end, Side::Right);
+                    ctx.terminal_mut().selection = Some(selection);
+                    ctx.mark_dirty();
+                }
+            },
             Action::Esc(s) => ctx.paste(s, false),
             Action::Command(program) => ctx.spawn_daemon(program.program(), program.args()),
             Action::Hint(hint) => {
@@ -240,6 +262,9 @@ impl<T: EventListener> Execute<T> for Action {
             Action::FocusNextPane => ctx.pane_command(crate::workspace::layout::PaneCommand::Next),
             Action::FocusPreviousPane => {
                 ctx.pane_command(crate::workspace::layout::PaneCommand::Previous)
+            },
+            Action::TogglePaneMaximized => {
+                ctx.pane_command(crate::workspace::layout::PaneCommand::ToggleMaximized)
             },
             Action::ClosePane => ctx.pane_command(crate::workspace::layout::PaneCommand::Close),
             Action::IncreaseFontSize => ctx.change_font_size(FONT_SIZE_STEP),

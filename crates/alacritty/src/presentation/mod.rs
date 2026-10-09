@@ -291,6 +291,7 @@ pub struct Display {
 
     glyph_cache: GlyphCache,
     meter: Meter,
+    progress_animation_start: Instant,
 }
 
 impl Display {
@@ -493,6 +494,7 @@ impl Display {
             pending_update: Default::default(),
             cursor_hidden: Default::default(),
             meter: Default::default(),
+            progress_animation_start: Instant::now(),
             ime: Default::default(),
         })
     }
@@ -733,7 +735,8 @@ impl Display {
         focused: bool,
     ) -> Option<Instant> {
         let images = terminal.graphics_placements();
-        let next_animation = images.iter().filter_map(|image| image.animation_deadline).min();
+        let mut next_animation = images.iter().filter_map(|image| image.animation_deadline).min();
+        let progress = terminal.progress();
         // Collect renderable content before the terminal is dropped.
         let mut content = RenderableContent::new(config, self, &terminal, search_state);
         let mut grid_cells = Vec::new();
@@ -1013,6 +1016,29 @@ impl Display {
         }
         if self.composite {
             self.damage_tracker.swap_damage();
+        }
+        use alacritty_terminal::protocols::progress::ProgressState;
+        if progress.state != ProgressState::Hidden {
+            let color = match progress.state {
+                ProgressState::Error => config.colors.normal.red,
+                ProgressState::Paused => config.colors.normal.yellow,
+                _ => config.colors.normal.blue,
+            };
+            let (x, width) = if progress.state == ProgressState::Indeterminate {
+                let phase = self.progress_animation_start.elapsed().as_secs_f32() % 2.;
+                let x = (1. - (phase - 1.).abs()) * size_info.width() * 0.75;
+                let frame = Instant::now() + Duration::from_millis(33);
+                next_animation = Some(next_animation.map_or(frame, |next| next.min(frame)));
+                (x, size_info.width() * 0.25)
+            } else {
+                (0., size_info.width() * f32::from(progress.percent) / 100.)
+            };
+            let height = (2. * self.window.scale_factor as f32).round().max(1.);
+            self.renderer.draw_rects(&size_info, &metrics, vec![RenderRect::new(
+                x, 0., width, height, color, 1.,
+            )]);
+            self.damage_tracker.frame().mark_fully_damaged();
+            self.damage_tracker.next_frame().mark_fully_damaged();
         }
         if self.composite && !focused {
             self.renderer.draw_overlay(&size_info, &metrics, background_color, 0.15);

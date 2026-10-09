@@ -39,6 +39,7 @@ pub enum Topic {
     BlinkTimeout,
     Frame,
     GraphicsAnimation,
+    NotificationExpiry,
 }
 
 /// Event scheduled to be emitted at a specific time.

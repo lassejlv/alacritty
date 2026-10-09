@@ -290,7 +290,8 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
     fn create_new_window(&mut self, #[cfg(target_os = "macos")] tabbing_id: Option<String>) {
         let mut options = WindowOptions::default();
         options.terminal_options.working_directory =
-            foreground_process_path(self.master_fd, self.shell_pid).ok();
+            crate::platform::process::reported_working_directory(self.terminal.working_directory())
+                .or_else(|| foreground_process_path(self.master_fd, self.shell_pid).ok());
 
         #[cfg(target_os = "macos")]
         {
@@ -307,9 +308,10 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
 
     #[cfg(windows)]
     fn create_new_window(&mut self) {
-        let _ = self
-            .event_proxy
-            .send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
+        let mut options = WindowOptions::default();
+        options.terminal_options.working_directory =
+            crate::platform::process::reported_working_directory(self.terminal.working_directory());
+        let _ = self.event_proxy.send_event(Event::new(EventType::CreateWindow(options), None));
     }
 
     #[cfg(target_os = "macos")]

@@ -50,6 +50,7 @@ pub struct WindowContext {
     pane: Pane,
     inactive: Vec<(Pane, PaneDisplay)>,
     layout: Layout,
+    maximized_pane: Option<PaneId>,
     next_pane_id: PaneId,
     layout_dirty: bool,
     pointer: PhysicalPosition<f64>,
@@ -64,6 +65,44 @@ pub struct WindowContext {
 }
 
 impl WindowContext {
+    fn notification_effects(
+        &mut self,
+        effects: Vec<alacritty_terminal::protocols::notifications::Effect>,
+        scheduler: &mut Scheduler,
+    ) {
+        use alacritty_terminal::event::Notify;
+        use alacritty_terminal::protocols::notifications::Effect;
+        for effect in effects {
+            match effect {
+                Effect::Reply(reply) => self.pane.session.notifier.notify(reply.into_bytes()),
+                Effect::Show(notification) => {
+                    self.pane.native_notifications.show(&notification);
+                },
+                Effect::Close(serial) => {
+                    self.pane.native_notifications.close(serial);
+                },
+                Effect::QueryAlive(query) => {
+                    self.pane.native_notifications.query_alive(query);
+                },
+            }
+        }
+        let timer = crate::app::scheduler::TimerId::for_pane(
+            crate::app::scheduler::Topic::NotificationExpiry,
+            self.id(),
+            self.pane.id,
+        );
+        scheduler.unschedule(timer);
+        if let Some(expiry) = self.pane.notifications.next_expiry() {
+            scheduler.schedule(
+                Event::new(crate::app::EventType::NotificationExpiry, self.id())
+                    .with_pane(self.pane.id),
+                expiry.saturating_duration_since(Instant::now()),
+                false,
+                timer,
+            );
+        }
+    }
+
     /// Create initial window context that does bootstrapping the graphics API we're going to use.
     pub fn initial(
         event_loop: &ActiveEventLoop,
@@ -173,6 +212,7 @@ impl WindowContext {
             pane,
             inactive: Vec::new(),
             layout: Layout::Leaf(0),
+            maximized_pane: None,
             next_pane_id: 1,
             layout_dirty: false,
             pointer: PhysicalPosition::new(0., 0.),
@@ -200,6 +240,9 @@ impl WindowContext {
         let ids: Vec<_> = self.inactive.iter().map(|(p, _)| p.id).collect();
         for id in ids {
             self.load_pane(id);
+            if !self.config.terminal.desktop_notifications {
+                self.pane.reset_notifications();
+            }
             self.pane.session.terminal.lock().set_options(self.config.term_options());
             self.display.visual_bell.update_config(&self.config.bell);
             self.display.hint_state.update_alphabet(self.config.hints.alphabet());
@@ -216,6 +259,9 @@ impl WindowContext {
         }
         self.load_pane(active);
         self.display.update_config(&self.config);
+        if !self.config.terminal.desktop_notifications {
+            self.pane.reset_notifications();
+        }
         self.pane.session.terminal.lock().set_options(self.config.term_options());
 
         // Reload cursor if its thickness has changed.
@@ -322,12 +368,30 @@ impl WindowContext {
     }
 
     fn divider_at(&self, x: f32, y: f32) -> Option<(Vec<bool>, Axis)> {
+        if self.maximized_pane.is_some() {
+            return None;
+        }
         let hit_padding = 3. * self.display.window.scale_factor as f32;
         self.layout.divider_at(self.bounds(), self.gap(), hit_padding, x, y)
     }
 
     fn rects(&self) -> Vec<(PaneId, Rect)> {
-        self.layout.rects(self.bounds(), self.gap())
+        let bounds = self.bounds();
+        self.layout
+            .rects(bounds, self.gap())
+            .into_iter()
+            .map(|(id, rect)| (id, if self.maximized_pane == Some(id) { bounds } else { rect }))
+            .collect()
+    }
+
+    fn visible_rects(&self) -> Vec<(PaneId, Rect)> {
+        self.layout.visible_rects(self.bounds(), self.gap(), self.maximized_pane)
+    }
+
+    fn restore_panes(&mut self) {
+        if self.maximized_pane.take().is_some() {
+            self.relayout();
+        }
     }
 
     fn minimum_pane_size(&self) -> (f32, f32) {
@@ -366,7 +430,7 @@ impl WindowContext {
     fn relayout(&mut self) {
         self.layout_dirty = false;
         let active = self.pane.id;
-        self.display.composite = !self.inactive.is_empty();
+        self.display.composite = !self.inactive.is_empty() && self.maximized_pane.is_none();
         for (id, rect) in self.rects() {
             self.load_pane(id);
             self.display.resize_pane(rect, &self.config);
@@ -397,6 +461,9 @@ impl WindowContext {
             return false;
         }
         let active = self.pane.id;
+        if self.maximized_pane == Some(id) {
+            self.maximized_pane = None;
+        }
         if active == id {
             let rects = self.rects();
             let index = rects.iter().position(|(p, _)| *p == id).unwrap();
@@ -405,6 +472,9 @@ impl WindowContext {
         debug!("Closed pane {id}");
         self.inactive.retain(|(pane, _)| pane.id != id);
         self.layout.remove(id);
+        if self.inactive.is_empty() {
+            self.maximized_pane = None;
+        }
         self.divider_drag = None;
         scheduler.unschedule_pane(self.id(), id);
         self.pane.session.terminal.lock().is_focused = self.focused;
@@ -434,6 +504,7 @@ impl WindowContext {
         if !self.inactive.iter().any(|(p, _)| p.id == id) {
             return;
         }
+        self.restore_panes();
         self.process_event(
             #[cfg(target_os = "macos")]
             event_loop,
@@ -479,6 +550,7 @@ impl WindowContext {
     ) {
         match command {
             PaneCommand::Split(axis) => {
+                self.restore_panes();
                 let Some((_, rect)) = self.rects().into_iter().find(|(id, _)| *id == self.pane.id)
                 else {
                     return;
@@ -491,10 +563,13 @@ impl WindowContext {
                 if !enough {
                     return;
                 }
-                #[allow(unused_mut)]
                 let mut options = WindowOptions::default();
+                options.terminal_options.working_directory =
+                    crate::platform::process::reported_working_directory(
+                        self.pane.session.terminal.lock().working_directory(),
+                    );
                 #[cfg(not(windows))]
-                {
+                if options.terminal_options.working_directory.is_none() {
                     options.terminal_options.working_directory =
                         crate::platform::process::foreground_process_path(
                             self.pane.session.master_fd,
@@ -546,6 +621,15 @@ impl WindowContext {
                     scheduler,
                 );
             },
+            PaneCommand::ToggleMaximized => {
+                if self.inactive.is_empty() {
+                    return;
+                }
+                self.maximized_pane =
+                    if self.maximized_pane.is_some() { None } else { Some(self.pane.id) };
+                self.divider_drag = None;
+                self.relayout();
+            },
             PaneCommand::Close => {
                 if !self.remove_exited_pane(Some(self.pane.id), scheduler) {
                     self.display.window.hold = false;
@@ -583,6 +667,73 @@ impl WindowContext {
             if let WinitEvent::UserEvent(user) = &event {
                 let id = user.pane_id.unwrap_or(active);
                 if !self.load_pane(id) {
+                    continue;
+                }
+                use crate::platform::notifications::Feedback;
+                use alacritty_terminal::protocols::notifications::Effect;
+                let effects = match &user.payload {
+                    crate::app::EventType::Terminal(TerminalEvent::DesktopNotification {
+                        body,
+                        truncated,
+                    }) => {
+                        let visible = !self.occluded
+                            && self.visible_rects().iter().any(|(pane, _)| *pane == id);
+                        Some(self.pane.notifications.apply(
+                            body,
+                            *truncated,
+                            Instant::now(),
+                            id == active && self.focused,
+                            visible,
+                            self.config.terminal.desktop_notifications,
+                        ))
+                    },
+                    crate::app::EventType::Terminal(TerminalEvent::NotificationsReset) => {
+                        Some(self.pane.notifications.reset())
+                    },
+                    crate::app::EventType::NotificationExpiry => {
+                        Some(self.pane.notifications.expire(Instant::now()))
+                    },
+                    crate::app::EventType::NotificationFeedback(Feedback::Alive {
+                        query,
+                        serials,
+                    }) => Some(vec![Effect::Reply(self.pane.notifications.alive(query, serials))]),
+                    crate::app::EventType::NotificationFeedback(
+                        Feedback::Closed(serial) | Feedback::Failed(serial),
+                    ) => {
+                        let mut effects = self.pane.notifications.closed(*serial);
+                        effects.push(Effect::Close(*serial));
+                        Some(effects)
+                    },
+                    crate::app::EventType::NotificationFeedback(Feedback::Activated {
+                        serial,
+                        button,
+                    }) => {
+                        let (focus, effects) = self.pane.notifications.activated(*serial, *button);
+                        if focus {
+                            self.load_pane(active);
+                            self.focus_pane(
+                                id,
+                                #[cfg(target_os = "macos")]
+                                event_loop,
+                                proxy,
+                                clipboard,
+                                scheduler,
+                            );
+                            self.display.window.set_visible(true);
+                            self.display.window.set_minimized(false);
+                            self.display.window.focus_window();
+                        }
+                        self.notification_effects(effects, scheduler);
+                        if !focus {
+                            self.load_pane(active);
+                        }
+                        continue;
+                    },
+                    _ => None,
+                };
+                if let Some(effects) = effects {
+                    self.notification_effects(effects, scheduler);
+                    self.load_pane(active);
                     continue;
                 }
                 if let crate::app::EventType::Pane(command) = user.payload {
@@ -699,7 +850,7 @@ impl WindowContext {
                         }
                         if !pressed {
                             if let Some((id, _)) = self
-                                .rects()
+                                .visible_rects()
                                 .into_iter()
                                 .find(|(_, r)| r.contains(position.x as f32, position.y as f32))
                             {
@@ -752,7 +903,7 @@ impl WindowContext {
                             continue;
                         }
                         if let Some((id, rect)) = self
-                            .rects()
+                            .visible_rects()
                             .into_iter()
                             .find(|(_, r)| r.contains(self.pointer.x as f32, self.pointer.y as f32))
                         {
@@ -796,7 +947,7 @@ impl WindowContext {
                     },
                     WindowEvent::MouseWheel { .. } => {
                         if let Some((id, _)) = self
-                            .rects()
+                            .visible_rects()
                             .into_iter()
                             .find(|(_, r)| r.contains(self.pointer.x as f32, self.pointer.y as f32))
                         {
@@ -853,7 +1004,7 @@ impl WindowContext {
         self.display.process_renderer_update();
         self.display.begin_panes(&self.config);
         let active = self.pane.id;
-        for (id, rect) in self.rects() {
+        for (id, rect) in self.visible_rects() {
             self.load_pane(id);
             self.display.pane_viewport(rect);
             if !self.display.visual_bell.completed() {

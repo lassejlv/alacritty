@@ -418,7 +418,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
             0x00..=0x06 | 0x08..=0x17 | 0x19 | 0x1C..=0x1F => {
                 if self.is_clipboard_osc() {
                     self.osc_truncated = true;
-                } else if self.is_program_status_osc() {
+                } else if self.is_raw_control_osc() {
                     self.action_osc_put(byte);
                 }
             },
@@ -427,7 +427,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
                 self.state = State::Ground
             },
             0x18 | 0x1A => {
-                if self.is_clipboard_osc() || self.is_program_status_osc() {
+                if self.is_clipboard_osc() || self.is_raw_control_osc() {
                     self.osc_truncated = true;
                 }
                 self.osc_end(performer, byte);
@@ -435,7 +435,7 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
                 self.state = State::Ground
             },
             0x1B => {
-                if self.is_clipboard_osc() || self.is_program_status_osc() {
+                if self.is_clipboard_osc() || self.is_raw_control_osc() {
                     self.state = State::OscEscape;
                     return;
                 }
@@ -444,8 +444,8 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
                 self.state = State::Escape
             },
             0x3B => {
-                // Semicolons are invalid value bytes, not status field separators.
-                if self.is_program_status_osc() {
+                // Preserve protocol payloads, including their own semicolon separators.
+                if self.is_raw_control_osc() {
                     self.action_osc_put(byte);
                     return;
                 }
@@ -467,6 +467,11 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
 
     fn is_program_status_osc(&self) -> bool {
         self.osc_num_params > 0 && self.osc_params[0] == (0, 4) && self.osc_raw.starts_with(b"7501")
+    }
+
+    fn is_raw_control_osc(&self) -> bool {
+        self.osc_num_params > 0
+            && matches!(&self.osc_raw[..self.osc_params[0].1], b"7" | b"9" | b"99" | b"133" | b"7501")
     }
 
     fn advance_osc_escape<P: Perform>(&mut self, performer: &mut P, byte: u8) {
@@ -650,14 +655,14 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
         }
         // Clipboard chunks are at most 4096 decoded bytes. Bound their metadata
         // and encoded payload without changing the limits of other OSC commands.
-        if self.is_clipboard_osc() && self.osc_raw.len() >= 64 * 1024 {
+        if (self.is_clipboard_osc() || self.is_raw_control_osc()) && self.osc_raw.len() >= 64 * 1024 {
             self.osc_truncated = true;
             return;
         }
         #[cfg(not(feature = "std"))]
         {
             if self.osc_raw.is_full() {
-                if self.is_program_status_osc() {
+                if self.is_raw_control_osc() {
                     self.osc_truncated = true;
                 }
                 return;

@@ -7,4 +7,8 @@ Other OSC commands retain the upstream behavior.
 
 OSC 7501 adds program status dispatch with a bounded buffer and complete-ST
 validation. Its body preserves semicolons so the receiver can skip malformed
-pairs. OSC 133 A dispatches shell prompt boundaries for status cleanup.
+pairs. OSC 7, 9, 99 and 133 preserve their payload separators and use bounded
+buffers with complete-ST validation. OSC 7 reports working directories, OSC 9;4
+reports progress, OSC 99 dispatches desktop notification requests, and OSC 133
+dispatches prompt, input, output and command-completion boundaries. Cancelled or
+oversized OSC 99 requests invalidate incomplete multipart notifications.

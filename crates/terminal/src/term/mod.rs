@@ -30,6 +30,7 @@ pub mod cell;
 pub mod color;
 mod graphics;
 pub mod search;
+mod shell;
 
 /// Minimum number of columns.
 ///
@@ -269,6 +270,9 @@ impl TermDamageState {
 
 pub struct Term<T> {
     program_status: crate::program_status::ProgramStatuses,
+    progress: crate::protocols::progress::Progress,
+    working_directory: Option<crate::protocols::working_directory::WorkingDirectory>,
+    shell: crate::protocols::shell::ShellState,
     graphics: crate::graphics::KittyGraphicsState,
     graphics_cell_size: (f32, f32),
     /// Terminal focus controlling the cursor shape.
@@ -395,6 +399,7 @@ impl<T> Term<T> {
     where
         T: EventListener,
     {
+        self.shell.navigation = None;
         let old_display_offset = self.grid.display_offset();
         self.grid.scroll_display(scroll);
         self.event_proxy.send_event(Event::MouseCursorDirty);
@@ -429,6 +434,9 @@ impl<T> Term<T> {
 
         Term {
             program_status: Default::default(),
+            progress: Default::default(),
+            working_directory: None,
+            shell: Default::default(),
             graphics: Default::default(),
             graphics_cell_size: (1., 1.),
             inactive_grid,
@@ -849,6 +857,16 @@ impl<T> Term<T> {
         &self.program_status
     }
 
+    pub fn progress(&self) -> crate::protocols::progress::Progress {
+        self.progress
+    }
+
+    pub fn working_directory(
+        &self,
+    ) -> Option<&crate::protocols::working_directory::WorkingDirectory> {
+        self.working_directory.as_ref()
+    }
+
     fn update_title(&self)
     where
         T: EventListener,
@@ -1060,11 +1078,15 @@ impl<T> Term<T> {
             cursor_cell = self.grid.cursor_cell();
         }
 
+        let shell_markers = cursor_cell.shell_markers();
         cursor_cell.c = c;
         cursor_cell.fg = fg;
         cursor_cell.bg = bg;
         cursor_cell.flags = flags;
         cursor_cell.extra = extra;
+        if let Some(markers) = shell_markers {
+            cursor_cell.set_shell_markers(markers);
+        }
     }
 
     #[inline]
@@ -1926,7 +1948,12 @@ impl<T: EventListener> Handler for Term<T> {
     fn reset_state(&mut self) {
         let had_status = !self.program_status.records().is_empty();
         self.program_status.clear();
+        self.progress = Default::default();
+        self.working_directory = None;
+        self.shell = Default::default();
+        self.event_proxy.send_event(Event::ProgressChanged);
         self.event_proxy.send_event(Event::KittyClipboardReset);
+        self.event_proxy.send_event(Event::NotificationsReset);
         self.graphics = Default::default();
         if self.mode.contains(TermMode::ALT_SCREEN) {
             mem::swap(&mut self.grid, &mut self.inactive_grid);
@@ -2355,6 +2382,31 @@ impl<T: EventListener> Handler for Term<T> {
     fn shell_prompt(&mut self) {
         if self.program_status.finish() {
             self.event_proxy.send_event(Event::ProgramStatusChanged);
+        }
+        if self.progress != Default::default() {
+            self.progress = Default::default();
+            self.event_proxy.send_event(Event::ProgressChanged);
+        }
+    }
+
+    fn working_directory(&mut self, body: &[u8]) {
+        if let Some(directory) = crate::protocols::working_directory::WorkingDirectory::parse(body)
+        {
+            self.working_directory = Some(directory);
+        }
+    }
+
+    fn shell_integration(&mut self, body: &[u8]) {
+        self.apply_shell_marker(body);
+    }
+
+    fn desktop_notification(&mut self, body: &[u8], truncated: bool) {
+        self.event_proxy.send_event(Event::DesktopNotification { body: body.to_vec(), truncated });
+    }
+
+    fn progress(&mut self, body: &[u8]) {
+        if self.progress.update(body) {
+            self.event_proxy.send_event(Event::ProgressChanged);
         }
     }
 

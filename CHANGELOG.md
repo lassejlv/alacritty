@@ -17,6 +17,13 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 
 ### Added
 
+- OSC 133 shell command tracking, command navigation, and copying/selecting command output
+- OSC 7 working-directory reports and automatic zsh shell integration
+- OSC 99 native desktop notifications with pane activation, replies, updates, and expiry
+- OSC 9;4 per-pane progress indicators
+
+- Maximize the focused pane and restore its split layout with Command/Control-Shift-Enter
+
 - Independent font zoom and reset for split panes
 
 - Command/Control-Delete and Backspace shortcuts for clearing the current shell input line

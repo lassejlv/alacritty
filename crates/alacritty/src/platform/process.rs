@@ -31,6 +31,28 @@ use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, CREATE_NO_
 #[cfg(target_os = "macos")]
 use crate::platform::macos;
 
+/// Resolve only local shell-reported directories which still exist.
+pub fn reported_working_directory(
+    directory: Option<&alacritty_terminal::protocols::working_directory::WorkingDirectory>,
+) -> Option<std::path::PathBuf> {
+    static HOSTNAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let hostname = HOSTNAME.get_or_init(|| {
+        #[cfg(not(windows))]
+        {
+            let mut name = [0u8; 256];
+            // SAFETY: The initialized writable buffer has the advertised length.
+            if unsafe { libc::gethostname(name.as_mut_ptr().cast(), name.len()) } == 0 {
+                let end = name.iter().position(|byte| *byte == 0).unwrap_or(name.len());
+                return String::from_utf8_lossy(&name[..end]).into_owned();
+            }
+            String::new()
+        }
+        #[cfg(windows)]
+        std::env::var("COMPUTERNAME").unwrap_or_default()
+    });
+    directory?.local_path(hostname).filter(|path| path.is_dir())
+}
+
 /// Start a new process in the background.
 #[cfg(windows)]
 pub fn spawn_daemon<I, S>(program: &str, args: I) -> io::Result<()>

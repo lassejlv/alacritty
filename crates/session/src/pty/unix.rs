@@ -116,6 +116,11 @@ impl Pty {
     }
 }
 
+/// Resolve the default shell using the same environment and passwd rules as PTY startup.
+pub fn default_shell_program() -> Result<String> {
+    ShellUser::from_env().map(|user| user.shell)
+}
+
 /// User information that is required for a new shell session.
 struct ShellUser {
     user: String,

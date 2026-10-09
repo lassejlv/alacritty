@@ -136,15 +136,20 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                     },
                     TerminalEvent::PtyWrite(text) => self.ctx.write_to_pty(text.into_bytes()),
                     TerminalEvent::MouseCursorDirty => self.reset_mouse_cursor(),
+                    TerminalEvent::ProgressChanged => self.ctx.mark_dirty(),
                     TerminalEvent::CursorBlinkingChange => self.ctx.update_cursor_blinking(),
                     TerminalEvent::Exit
                     | TerminalEvent::ChildExit(_)
                     | TerminalEvent::Wakeup
+                    | TerminalEvent::DesktopNotification { .. }
+                    | TerminalEvent::NotificationsReset
                     | TerminalEvent::ProgramStatusChanged => (),
                 },
                 #[cfg(unix)]
                 EventType::IpcConfig(_) | EventType::IpcGetConfig(..) | EventType::Shutdown => (),
                 EventType::Message(_)
+                | EventType::NotificationFeedback(_)
+                | EventType::NotificationExpiry
                 | EventType::ConfigReload(_)
                 | EventType::Pane(_)
                 | EventType::CreateWindow(_)

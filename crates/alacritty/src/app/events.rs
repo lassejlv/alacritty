@@ -69,6 +69,8 @@ pub enum EventType {
     BlinkCursor,
     BlinkCursorTimeout,
     GraphicsAnimation,
+    NotificationFeedback(crate::platform::notifications::Feedback),
+    NotificationExpiry,
     SearchNext,
     #[cfg(unix)]
     Shutdown,

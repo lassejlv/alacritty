@@ -699,6 +699,22 @@ pub trait Handler {
     /// OSC 133 A starts a new shell prompt.
     fn shell_prompt(&mut self) {}
 
+    /// OSC 133 semantic prompt, command and output boundaries.
+    fn shell_integration(&mut self, body: &[u8]) {
+        if body.split(|b| *b == b';').next() == Some(b"A") {
+            self.shell_prompt();
+        }
+    }
+
+    /// Shell-reported current directory as an OSC 7 file URI.
+    fn working_directory(&mut self, _: &[u8]) {}
+
+    /// ConEmu progress and other OSC 9 extensions.
+    fn progress(&mut self, _: &[u8]) {}
+
+    /// OSC 99 notification packet; cancelled packets invalidate partial notifications.
+    fn desktop_notification(&mut self, _: &[u8], _truncated: bool) {}
+
     /// Run the decaln routine.
     fn decaln(&mut self) {}
 
@@ -1357,6 +1373,8 @@ where
     fn osc_dispatch_oversized(&mut self, params: &[&[u8]], bell_terminated: bool) {
         if params.first() == Some(&b"5522".as_slice()) {
             self.handler.clipboard_control(&params[1..], bell_terminated, true);
+        } else if params.first() == Some(&b"99".as_slice()) && params.len() == 2 {
+            self.handler.desktop_notification(params[1], true);
         }
     }
 
@@ -1532,7 +1550,10 @@ where
                 self.handler.program_status(params[1], bell_terminated);
             },
 
-            b"133" if params.get(1) == Some(&b"A".as_slice()) => self.handler.shell_prompt(),
+            b"7" if params.len() == 2 => self.handler.working_directory(params[1]),
+            b"9" if params.len() == 2 => self.handler.progress(params[1]),
+            b"99" if params.len() == 2 => self.handler.desktop_notification(params[1], false),
+            b"133" if params.len() == 2 => self.handler.shell_integration(params[1]),
 
             // Reset color index.
             b"104" => {

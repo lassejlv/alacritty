@@ -39,6 +39,11 @@ Shift while right-clicking to open the native menu instead.
 
 ## Split panes
 
+Shell command navigation, working-directory reports and zsh startup hooks are
+documented in [shell integration](../protocols/shell-integration.md).
+See also [desktop notifications](../protocols/notifications.md) and
+[progress indicators](../protocols/progress.md).
+
 Each native tab can contain multiple independent terminals. Splits can be nested:
 
 | Action | Shortcut | Menu |
@@ -46,6 +51,7 @@ Each native tab can contain multiple independent terminals. Splits can be nested
 | Split the focused pane to the right | Cmd+D | File → Split Right |
 | Split the focused pane below | Cmd+Shift+D | File → Split Down |
 | Focus next / previous pane | Cmd+Option+Right / Left | Window → Next / Previous Pane |
+| Maximize / restore the focused pane | Cmd+Shift+Enter | View → Maximize/Restore Pane |
 | Close the focused pane | Cmd+W | File → Close Pane |
 | Close the entire tab and its panes | Cmd+Shift+W | File → Close Tab |
 
@@ -59,13 +65,19 @@ change or reset only the focused pane. New splits inherit the focused pane's
 zoom, then retain their own size. Zoom is preserved when switching panes or
 moving the window between displays.
 
+Cmd+Shift+Enter temporarily expands the focused pane to fill its tab. Press it
+again to restore the split layout and divider positions. Other panes keep running
+while hidden. Splitting, switching to another pane, or closing the maximized pane
+restores the layout. With one pane, the shortcut has no effect. The same action is
+available in the right-click menu and uses Ctrl+Shift+Enter on Windows, Linux, and BSD.
+
 Closing a pane (or exiting its shell) expands its sibling. Closing the last pane
 closes its tab. Closing the native window/tab closes all its panes. Splits stay
 inside their tab when creating or switching tabs. A split is ignored if there
 isn't room for two panes with at least 12 columns and four rows each.
 
 Custom bindings can use `SplitRight`, `SplitDown`, `FocusNextPane`,
-`FocusPreviousPane`, and `ClosePane`. `Quit` closes the entire native tab. These
+`FocusPreviousPane`, `TogglePaneMaximized`, and `ClosePane`. `Quit` closes the entire native tab. These
 actions also work on other platforms when configured explicitly; the default
 shortcuts and native menu integration above are macOS-specific.
 

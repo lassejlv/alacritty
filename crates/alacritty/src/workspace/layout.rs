@@ -13,6 +13,7 @@ pub enum PaneCommand {
     Split(Axis),
     Next,
     Previous,
+    ToggleMaximized,
     Close,
     CloseTab,
 }
@@ -78,6 +79,20 @@ impl Layout {
         let mut result = Vec::new();
         self.visit(bounds, gap, &mut result);
         result
+    }
+
+    /// Visible panes, leaving the split tree and its ratios intact during maximization.
+    pub fn visible_rects(
+        &self,
+        bounds: Rect,
+        gap: f32,
+        maximized: Option<PaneId>,
+    ) -> Vec<(PaneId, Rect)> {
+        let rects = self.rects(bounds, gap);
+        match maximized {
+            Some(id) if rects.iter().any(|(pane, _)| *pane == id) => vec![(id, bounds)],
+            _ => rects,
+        }
     }
 
     fn children(bounds: Rect, axis: Axis, ratio: f32, gap: f32) -> (Rect, Rect, Rect) {
@@ -218,6 +233,44 @@ mod tests {
         assert!(layout.remove(0));
         assert_eq!(layout.rects(bounds(), 4.), vec![(2, bounds())]);
         assert!(!layout.remove(2));
+    }
+
+    #[test]
+    fn maximizing_a_nested_pane_preserves_split_sizes_and_order() {
+        let mut layout = Layout::Leaf(0);
+        layout.split(0, 1, Axis::Horizontal);
+        layout.split(1, 2, Axis::Vertical);
+        layout.drag(&[], bounds(), 1., (300., 0.), (100., 50.));
+        layout.drag(&[true], bounds(), 1., (0., 200.), (100., 50.));
+        let original = layout.rects(bounds(), 1.);
+
+        assert_eq!(layout.visible_rects(bounds(), 1., Some(2)), vec![(2, bounds())]);
+        assert_eq!(layout.rects(bounds(), 1.), original);
+        assert_eq!(layout.visible_rects(bounds(), 1., None), original);
+    }
+
+    #[test]
+    fn maximized_pane_follows_window_size_without_changing_split_ratios() {
+        let mut layout = Layout::Leaf(0);
+        layout.split(0, 1, Axis::Horizontal);
+        layout.drag(&[], bounds(), 1., (300., 0.), (100., 50.));
+        let larger = Rect { width: 1800., height: 900., ..Rect::default() };
+        let restored = layout.rects(larger, 1.);
+
+        assert_eq!(layout.visible_rects(larger, 1., Some(1)), vec![(1, larger)]);
+        assert_eq!(layout.visible_rects(larger, 1., None), restored);
+        assert_eq!(restored[0].1.width, 540.);
+    }
+
+    #[test]
+    fn exiting_hidden_panes_preserves_the_maximized_pane() {
+        let mut layout = Layout::Leaf(0);
+        layout.split(0, 1, Axis::Horizontal);
+        layout.split(1, 2, Axis::Vertical);
+        assert!(layout.remove(1));
+        assert_eq!(layout.visible_rects(bounds(), 1., Some(2)), vec![(2, bounds())]);
+        assert!(layout.remove(2));
+        assert_eq!(layout.visible_rects(bounds(), 1., Some(2)), vec![(0, bounds())]);
     }
 
     #[test]

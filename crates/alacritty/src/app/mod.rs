@@ -33,6 +33,7 @@ pub mod commands;
 pub mod context;
 pub mod events;
 pub mod scheduler;
+pub mod shell_integration;
 mod startup;
 
 pub use context::ActionContext;

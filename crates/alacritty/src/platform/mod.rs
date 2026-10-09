@@ -1,5 +1,6 @@
 #[cfg(target_os = "macos")]
 pub mod macos;
+pub mod notifications;
 pub mod process;
 #[cfg(unix)]
 pub mod unix;

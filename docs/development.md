@@ -12,6 +12,7 @@ cargo test --locked -p alacritty_terminal --no-default-features
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo +nightly fmt --all -- --check
 python3 -m unittest discover -s scripts/release -p 'test_*.py'
+python3 scripts/smoke/shell-integration.py
 ```
 
 The application is the default workspace member. `--workspace` also runs the

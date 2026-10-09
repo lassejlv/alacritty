@@ -630,6 +630,19 @@ Windows: _"powershell"_
 
 	Default: _"OnlyCopy"_
 
+*shell_integration* = _true_ | _false_
+
+	Automatically add OSC 7 directory reports and OSC 133 command markers to
+	interactive zsh sessions. Uses temporary startup hooks; user dotfiles are
+	not modified. Explicit commands and shells started with custom arguments
+	are left alone. Default: _true_.
+
+*desktop_notifications* = _true_ | _false_
+
+	Allow applications to send native desktop notifications using OSC 99.
+	Disabling this closes existing notifications and discards partial requests.
+	Operating-system notification permissions still apply. Default: _true_.
+
 # MOUSE
 
 This section documents the *[mouse]* table of the configuration file.
@@ -846,6 +859,17 @@ _https://docs.rs/winit/latest/winit/keyboard/enum.Key.html#variant.Dead_
 
 		*FocusNextPane*, *FocusPreviousPane*
 			Move keyboard focus to the next or previous pane in layout order.
+
+		*TogglePaneMaximized*
+			Expand the focused pane to fill its tab, or restore the split layout.
+			Other panes keep running while hidden. Has no effect with a single pane.
+
+		*PreviousPrompt*, *NextPrompt*
+			Scroll to the previous or next shell command. Requires OSC 133 markers.
+
+		*CopyLastCommandOutput*, *SelectLastCommandOutput*
+			Copy or select the most recently completed command's output, without its
+			prompt. Has no effect if its boundaries have been erased or evicted.
 
 		*ClosePane*
 			Close the focused terminal pane. Closing the last pane closes its tab.

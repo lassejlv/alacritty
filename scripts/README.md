@@ -27,3 +27,9 @@ scripts/diagnostics/24-bit-color.sh
 
 Run these commands from the repository root. Protocol smoke checks live in
 `scripts/smoke/`; packaging and signing scripts live in `scripts/release/`.
+
+## Shell integration
+
+Run `python3 scripts/smoke/shell-integration.py` to test the bundled zsh hooks in
+a real PTY with isolated startup files. This checks command boundaries, exit
+status and encoded working-directory reports without changing your shell config.
