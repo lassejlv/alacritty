@@ -162,9 +162,13 @@ impl Metadata {
         let mut raw_mime = "";
         let mut raw_password = "";
         let mut raw_name = "";
+        let mut malformed = false;
 
         for record in raw.split(':') {
-            let (key, value) = record.split_once('=').ok_or(MetadataError::Drop)?;
+            let Some((key, value)) = record.split_once('=') else {
+                malformed = true;
+                continue;
+            };
             match key {
                 "type" => operation = Operation::parse(value),
                 "loc" => {
@@ -184,6 +188,9 @@ impl Metadata {
 
         let operation = operation.ok_or(MetadataError::Drop)?;
         let id = sanitize_id(raw_id);
+        if malformed {
+            return Err(MetadataError::InvalidValue(operation, id));
+        }
         let mime_type = decode_text_metadata(raw_mime, MAX_MIME_BYTES)
             .map_err(|error| classify_metadata_error(error, operation, id.clone()))?;
         if mime_type.as_deref().is_some_and(|mime_type| !valid_mime_type(mime_type)) {
@@ -467,16 +474,33 @@ impl KittyClipboardHostState {
         host: &mut impl ClipboardHost,
     ) -> Vec<Vec<u8>> {
         let terminator = osc.terminator;
+        let metadata = osc.body.split(|b| *b == b';').next().unwrap_or_default();
+        let operation = metadata
+            .split(|b| *b == b':')
+            .filter_map(|record| record.strip_prefix(b"type="))
+            .next_back()
+            .and_then(|value| std::str::from_utf8(value).ok())
+            .and_then(Operation::parse);
+        let write_id = (operation == Some(Operation::Write)).then(|| {
+            metadata
+                .split(|b| *b == b':')
+                .filter_map(|record| record.strip_prefix(b"id="))
+                .next_back()
+                .map(|id| sanitize_id(&String::from_utf8_lossy(id)))
+                .unwrap_or_default()
+        });
         if osc.truncated {
+            if operation == Some(Operation::Read) {
+                return Vec::new();
+            }
+            if operation == Some(Operation::Write) {
+                let id = write_id.unwrap_or_default();
+                self.write = None;
+                self.ignore_write_packets = true;
+                return vec![response("write", "EINVAL", &id, &[], None, terminator)];
+            }
             if self.write.is_some() {
                 return self.abort_write("EINVAL", terminator);
-            }
-            let metadata = osc.body.split(|b| *b == b';').next().unwrap_or_default();
-            if let Ok(metadata) = Metadata::parse(metadata) {
-                if metadata.operation == Operation::Write {
-                    self.ignore_write_packets = true;
-                    return vec![response("write", "EINVAL", &metadata.id, &[], None, terminator)];
-                }
             }
             return Vec::new();
         }
@@ -494,6 +518,23 @@ impl KittyClipboardHostState {
                 let id = self.write.take().map(|write| write.id).unwrap_or_default();
                 self.ignore_write_packets = true;
                 return vec![response("write", "EINVAL", &id, &[], None, terminator)];
+            },
+            Err(MetadataError::Drop) if operation == Some(Operation::Write) => {
+                self.write = None;
+                self.ignore_write_packets = true;
+                return vec![response(
+                    "write",
+                    "EINVAL",
+                    &write_id.unwrap_or_default(),
+                    &[],
+                    None,
+                    terminator,
+                )];
+            },
+            Err(MetadataError::Drop)
+                if self.write.is_some() && operation != Some(Operation::Read) =>
+            {
+                return self.abort_write("EINVAL", terminator);
             },
             Err(_) => return Vec::new(),
         };
@@ -935,6 +976,52 @@ fn response(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_metadata_aborts_write_regardless_of_field_order() {
+        for malformed in ["type=wdata:mime", "mime:type=wdata", "mime=YWJj:missing-type"] {
+            let mut state = KittyClipboardHostState::new();
+            let mut host = Host { read: TerminalClipboardReadResult::Denied, written: Vec::new() };
+            state.handle_osc(osc("type=write:id=metadata"), &mut host);
+            state.handle_osc(osc("type=wdata:mime=dGV4dC9wbGFpbg==;YQ=="), &mut host);
+            let replies = state.handle_osc(osc(malformed), &mut host);
+            assert_eq!(replies, [b"\x1b]5522;type=write:status=EINVAL:id=metadata\x1b\\".to_vec()]);
+            assert!(state.handle_osc(osc("type=wdata"), &mut host).is_empty());
+            assert!(host.written.is_empty());
+        }
+    }
+
+    #[test]
+    fn oversized_initial_writes_report_errors_even_with_incomplete_metadata() {
+        let mut state = KittyClipboardHostState::new();
+        let mut host = Host { read: TerminalClipboardReadResult::Denied, written: Vec::new() };
+        let packet = osc("type=write:id=oversized:name=AAA").with_truncation(true);
+        assert_eq!(state.handle_osc(packet, &mut host), [
+            b"\x1b]5522;type=write:status=EINVAL:id=oversized\x1b\\".to_vec()
+        ]);
+        assert!(state.handle_osc(osc("type=wdata"), &mut host).is_empty());
+        assert!(host.written.is_empty());
+    }
+
+    #[test]
+    fn invalid_reads_are_ignored_without_discarding_a_separate_pending_write() {
+        for read in [
+            osc("type=read:malformed;Lg=="),
+            KittyClipboardOsc::from_body(
+                b"type=read:id=\xff;Lg==",
+                KittyClipboardOscTerminator::StringTerminator,
+            ),
+            osc("type=read;Lg==").with_truncation(true),
+        ] {
+            let mut state = KittyClipboardHostState::new();
+            let mut host = Host { read: TerminalClipboardReadResult::Denied, written: Vec::new() };
+            state.handle_osc(osc("type=write"), &mut host);
+            state.handle_osc(osc("type=wdata:mime=dGV4dC9wbGFpbg==;YQ=="), &mut host);
+            assert!(state.handle_osc(read, &mut host).is_empty());
+            state.handle_osc(osc("type=wdata"), &mut host);
+            assert_eq!(host.written[0].data, b"a");
+        }
+    }
 
     #[test]
     fn base64_stream_can_split_at_every_byte_boundary() {
