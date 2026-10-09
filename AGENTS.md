@@ -2,7 +2,7 @@
 
 ## Project structure and module organization
 
-This Rust 2024 workspace requires Rust 1.85 or newer:
+This Rust 2024 workspace requires Rust 1.99 or newer and pins 1.99.0 in `rust-toolchain.toml`:
 
 - `alacritty/`: application, OpenGL renderer, input, configuration, and native macOS integration.
 - `alacritty_terminal/`: terminal state, PTY handling, Kitty protocols, and integration tests.

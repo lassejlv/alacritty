@@ -15,6 +15,17 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 - Fixed `alacritty-escapes(7)` manpage missing from macOS install
 - Added the `Open Alacritty here` entry to the right-click context menu for folders on Windows
 
+### Added
+
+- Command-A selects the active pane's full buffer on macOS
+- Native macOS terminal context menu with clipboard, selection, search, and pane commands
+
+- OSC 7501 program status, shown in dynamic window and tab titles
+
+### Changed
+
+- Minimum Rust version has been bumped to 1.99.0
+
 ### Fixed
 
 - Spurious "Failed to set new owner of XCB selection" warnings on X11

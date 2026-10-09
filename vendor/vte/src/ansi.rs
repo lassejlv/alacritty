@@ -693,6 +693,12 @@ pub trait Handler {
     /// Kitty OSC 5522 metadata and optional payload, preserving OSC separators.
     fn clipboard_control(&mut self, _: &[&[u8]], _bell_terminated: bool, _truncated: bool) {}
 
+    /// OSC 7501 program status report or feature query.
+    fn program_status(&mut self, _: &[u8], _bell_terminated: bool) {}
+
+    /// OSC 133 A starts a new shell prompt.
+    fn shell_prompt(&mut self) {}
+
     /// Run the decaln routine.
     fn decaln(&mut self) {}
 
@@ -1521,6 +1527,12 @@ where
             },
 
             b"5522" => self.handler.clipboard_control(&params[1..], bell_terminated, false),
+
+            b"7501" if params.len() == 2 => {
+                self.handler.program_status(params[1], bell_terminated);
+            },
+
+            b"133" if params.get(1) == Some(&b"A".as_slice()) => self.handler.shell_prompt(),
 
             // Reset color index.
             b"104" => {

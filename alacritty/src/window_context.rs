@@ -59,6 +59,8 @@ pub struct WindowContext {
     layout_dirty: bool,
     pointer: PhysicalPosition<f64>,
     divider_drag: Option<Vec<bool>>,
+    #[cfg(target_os = "macos")]
+    context_menu_button: Option<MouseButton>,
     focused: bool,
     modifiers: Modifiers,
     occluded: bool,
@@ -206,6 +208,8 @@ impl WindowContext {
             layout_dirty: false,
             pointer: PhysicalPosition::new(0., 0.),
             divider_drag: None,
+            #[cfg(target_os = "macos")]
+            context_menu_button: None,
             focused: true,
             message_buffer: Default::default(),
             window_config: Default::default(),
@@ -680,19 +684,19 @@ impl WindowContext {
                         }
                         let pressed = self.pane.mouse.left_button_state == ElementState::Pressed
                             || self.pane.mouse.right_button_state == ElementState::Pressed;
-                        if !pressed {
-                            if let Some((_, axis)) = self.layout.divider_at(
+                        if !pressed
+                            && let Some((_, axis)) = self.layout.divider_at(
                                 self.bounds(),
                                 self.gap(),
                                 position.x as f32,
                                 position.y as f32,
-                            ) {
-                                self.display.window.set_mouse_cursor(match axis {
-                                    Axis::Horizontal => CursorIcon::ColResize,
-                                    Axis::Vertical => CursorIcon::RowResize,
-                                });
-                                continue;
-                            }
+                            )
+                        {
+                            self.display.window.set_mouse_cursor(match axis {
+                                Axis::Horizontal => CursorIcon::ColResize,
+                                Axis::Vertical => CursorIcon::RowResize,
+                            });
+                            continue;
                         }
                         if !pressed {
                             if let Some((id, _)) = self
@@ -723,7 +727,18 @@ impl WindowContext {
                         self.divider_drag = None;
                         continue;
                     },
+                    #[cfg(target_os = "macos")]
+                    WindowEvent::MouseInput { state: ElementState::Released, button, .. }
+                        if self.context_menu_button == Some(*button) =>
+                    {
+                        self.context_menu_button = None;
+                        continue;
+                    },
                     WindowEvent::MouseInput { state: ElementState::Pressed, button, .. } => {
+                        #[cfg(target_os = "macos")]
+                        {
+                            self.context_menu_button = None;
+                        }
                         if let Some((path, _)) = self.layout.divider_at(
                             self.bounds(),
                             self.gap(),
@@ -751,6 +766,31 @@ impl WindowContext {
                             self.pane.mouse.x = (self.pointer.x - rect.x as f64).max(0.) as usize;
                             self.pane.mouse.y = (self.pointer.y - rect.y as f64).max(0.) as usize;
                             self.pane.mouse.inside_text_area = true;
+                            #[cfg(target_os = "macos")]
+                            {
+                                let term = self.pane.terminal.lock();
+                                let mouse_mode = term.mode().intersects(TermMode::MOUSE_MODE)
+                                    && !term.mode().contains(TermMode::VI);
+                                let has_selection =
+                                    term.selection.as_ref().is_some_and(|s| !s.is_empty());
+                                drop(term);
+                                if crate::macos::menus::is_context_click(
+                                    *button,
+                                    self.modifiers.state(),
+                                    mouse_mode,
+                                ) {
+                                    self.context_menu_button = Some(*button);
+                                    crate::macos::menus::Menus::popup(
+                                        &self.display.window,
+                                        self.pane.id,
+                                        self.pointer,
+                                        has_selection,
+                                        &self.config,
+                                        proxy.clone(),
+                                    );
+                                    continue;
+                                }
+                            }
                         }
                     },
                     WindowEvent::MouseWheel { .. } => {

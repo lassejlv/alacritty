@@ -61,12 +61,15 @@ cd alacritty
 
 1. Install [`rustup.rs`](https://rustup.rs/).
 
-3. To make sure you have the right Rust compiler installed, run
+2. From the repository root, install and verify the pinned Rust 1.99.0 toolchain:
 
    ```sh
-   rustup override set stable
-   rustup update stable
+   rustup show
    ```
+
+   Rustup reads `rust-toolchain.toml` and installs the required compiler, Clippy,
+   and rustfmt components. Remove any existing directory override with
+   `rustup override unset` if it selects a different version.
 
 ### Dependencies
 

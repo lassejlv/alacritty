@@ -5,14 +5,26 @@ use objc2::rc::Retained;
 use objc2::runtime::Sel;
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSEventModifierFlags, NSMenu, NSMenuItem, NSMenuItemValidation,
+    NSApplication, NSEventModifierFlags, NSMenu, NSMenuItem, NSMenuItemValidation, NSView,
 };
-use objc2_foundation::{NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{NSObject, NSObjectProtocol, NSPoint, NSString};
+use winit::dpi::PhysicalPosition;
+use winit::event::MouseButton;
 use winit::event_loop::EventLoopProxy;
 use winit::keyboard::{Key, ModifiersState, NamedKey};
+use winit::raw_window_handle::RawWindowHandle;
+use winit::window::WindowId;
 
 use crate::config::{Action, BindingKey, UiConfig};
+use crate::display::window::Window;
 use crate::event::{Event, EventType};
+use crate::panes::PaneId;
+
+pub fn is_context_click(button: MouseButton, modifiers: ModifiersState, mouse_mode: bool) -> bool {
+    let secondary =
+        button == MouseButton::Right || (button == MouseButton::Left && modifiers.control_key());
+    secondary && (!mouse_mode || modifiers.shift_key())
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum Command {
@@ -26,6 +38,8 @@ pub enum Command {
     Quit,
     Copy,
     Paste,
+    SelectAll,
+    ClearSelection,
     SearchForward,
     IncreaseFontSize,
     DecreaseFontSize,
@@ -53,6 +67,8 @@ impl Command {
             Self::Quit => Action::Quit,
             Self::Copy => Action::Copy,
             Self::Paste => Action::Paste,
+            Self::SelectAll => Action::SelectAll,
+            Self::ClearSelection => Action::ClearSelection,
             Self::SearchForward => Action::SearchForward,
             Self::IncreaseFontSize => Action::IncreaseFontSize,
             Self::DecreaseFontSize => Action::DecreaseFontSize,
@@ -72,6 +88,7 @@ struct TargetState {
     proxy: EventLoopProxy<Event>,
     commands: RefCell<Vec<Command>>,
     windows: RefCell<Vec<(isize, bool)>>,
+    context: Option<(WindowId, PaneId)>,
 }
 
 define_class!(
@@ -88,9 +105,14 @@ define_class!(
         #[unsafe(method(performAlacrittyCommand:))]
         fn perform(&self, sender: &NSMenuItem) {
             let Some(command) = self.ivars().commands.borrow().get(sender.tag() as usize).cloned() else { return };
+            if let Some((window, pane)) = self.ivars().context {
+                let event = Event::new(EventType::MacosAction(command), window).with_pane(pane);
+                let _ = self.ivars().proxy.send_event(event);
+                return;
+            }
             let app = NSApplication::sharedApplication(self.mtm());
             if let Some(selector) = self.native_edit_action(command) {
-                // SAFETY: Standard copy:/paste: selectors are sent through AppKit's responder
+                // SAFETY: Standard text-editing selectors are sent through AppKit's responder
                 // chain only when a native text control, rather than a terminal, is focused.
                 unsafe { app.sendAction_to_from(selector, None, Some(sender)); }
                 return;
@@ -123,6 +145,7 @@ impl Target {
         let selector = match command {
             Command::Copy => sel!(copy:),
             Command::Paste => sel!(paste:),
+            Command::SelectAll => sel!(selectAll:),
             _ => return None,
         };
         let window = NSApplication::sharedApplication(self.mtm()).keyWindow()?;
@@ -149,6 +172,7 @@ impl Menus {
             proxy,
             commands: RefCell::default(),
             windows: RefCell::default(),
+            context: None,
         });
         // SAFETY: NSObject's init initializes the allocated main-thread target.
         let target = unsafe { msg_send![super(allocated), init] };
@@ -178,6 +202,7 @@ impl Menus {
         let edit = Self::submenu(&bar, "Edit", mtm);
         menus.add(&edit, "Copy", "c", cmd, Command::Copy);
         menus.add(&edit, "Paste", "v", cmd, Command::Paste);
+        menus.add(&edit, "Select All", "a", cmd, Command::SelectAll);
         edit.addItem(&NSMenuItem::separatorItem(mtm));
         menus.add(&edit, "Find…", "f", cmd, Command::SearchForward);
 
@@ -213,6 +238,64 @@ impl Menus {
 
     pub fn set_windows(&self, windows: Vec<(isize, bool)>) {
         *self.target.ivars().windows.borrow_mut() = windows;
+    }
+
+    /// Show a native menu with commands bound to the pane that was clicked.
+    pub fn popup(
+        window: &Window,
+        pane: PaneId,
+        position: PhysicalPosition<f64>,
+        has_selection: bool,
+        config: &UiConfig,
+        proxy: EventLoopProxy<Event>,
+    ) {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let RawWindowHandle::AppKit(handle) = window.raw_window_handle() else { return };
+        // SAFETY: Winit owns the live NSView, and this method runs on the main thread.
+        let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+        let allocated = Target::alloc(mtm).set_ivars(TargetState {
+            proxy,
+            commands: RefCell::default(),
+            windows: RefCell::default(),
+            context: Some((window.id(), pane)),
+        });
+        // SAFETY: NSObject's init initializes the allocated main-thread target.
+        let target = unsafe { msg_send![super(allocated), init] };
+        let mut menus = Self { target, items: Vec::new(), shortcuts: Vec::new() };
+        let menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str("Terminal"));
+        menu.setAutoenablesItems(false);
+        let cmd = NSEventModifierFlags::Command;
+        menus.add(&menu, "Copy", "c", cmd, Command::Copy);
+        menus.add(&menu, "Paste", "v", cmd, Command::Paste);
+        menus.add(&menu, "Select All", "a", cmd, Command::SelectAll);
+        menus.add(&menu, "Clear Selection", "", cmd, Command::ClearSelection);
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
+        menus.add(&menu, "Find…", "f", cmd, Command::SearchForward);
+        menus.add(&menu, "Clear Scrollback", "", cmd, Command::ClearHistory);
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
+        menus.add(&menu, "Split Right", "d", cmd, Command::SplitRight);
+        menus.add(&menu, "Split Down", "d", cmd | NSEventModifierFlags::Shift, Command::SplitDown);
+        menus.add(&menu, "New Tab", "t", cmd, Command::CreateNewTab);
+        menus.add(&menu, "New Window", "n", cmd, Command::CreateNewWindow);
+        for (item, command) in menus.items.iter().zip(menus.target.ivars().commands.borrow().iter())
+        {
+            let enabled = match command {
+                Command::Copy | Command::ClearSelection => has_selection,
+                Command::CreateNewTab => {
+                    config.window.decorations != crate::config::window::Decorations::None
+                },
+                _ => true,
+            };
+            item.setEnabled(enabled);
+        }
+        menus.configure_shortcuts(config);
+
+        let bounds = view.bounds();
+        let x = bounds.origin.x + position.x / window.scale_factor;
+        let y = position.y / window.scale_factor;
+        let y = bounds.origin.y + if view.isFlipped() { y } else { bounds.size.height - y };
+        // AppKit tracks the menu synchronously. Keep its target alive until tracking finishes.
+        menu.popUpMenuPositioningItem_atLocation_inView(None, NSPoint::new(x, y), Some(view));
     }
 
     /// Don't let native accelerators swallow a user's remapped terminal shortcuts.
@@ -304,5 +387,27 @@ impl Drop for Menus {
             // SAFETY: Clear AppKit's non-owning references before releasing the target.
             unsafe { item.setTarget(None) };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_click_preserves_application_mouse_reporting() {
+        assert!(is_context_click(MouseButton::Right, ModifiersState::empty(), false));
+        assert!(!is_context_click(MouseButton::Right, ModifiersState::empty(), true));
+        assert!(is_context_click(MouseButton::Right, ModifiersState::SHIFT, true));
+        assert!(is_context_click(MouseButton::Left, ModifiersState::CONTROL, false));
+        assert!(!is_context_click(MouseButton::Left, ModifiersState::CONTROL, true));
+        assert!(!is_context_click(MouseButton::Left, ModifiersState::empty(), false));
+        assert!(!is_context_click(MouseButton::Middle, ModifiersState::empty(), false));
+    }
+
+    #[test]
+    fn selection_menu_commands_use_terminal_actions() {
+        assert_eq!(Command::SelectAll.action(), Some(Action::SelectAll));
+        assert_eq!(Command::ClearSelection.action(), Some(Action::ClearSelection));
     }
 }

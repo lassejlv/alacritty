@@ -245,6 +245,9 @@ pub enum Action {
     /// Clear active selection.
     ClearSelection,
 
+    /// Select the active screen and its entire scrollback buffer.
+    SelectAll,
+
     /// Toggle vi mode.
     ToggleViMode,
 
@@ -618,6 +621,7 @@ pub fn platform_key_bindings() -> Vec<KeyBinding> {
         "n",    ModifiersState::SUPER;                                         Action::CreateNewWindow;
         "f",    ModifiersState::CONTROL | ModifiersState::SUPER;               Action::ToggleFullscreen;
         "c",    ModifiersState::SUPER;                                         Action::Copy;
+        "a",    ModifiersState::SUPER;                                         Action::SelectAll;
         "c",    ModifiersState::SUPER, +BindingMode::VI, ~BindingMode::SEARCH; Action::ClearSelection;
         "h",    ModifiersState::SUPER;                                         Action::Hide;
         "h",    ModifiersState::SUPER   | ModifiersState::ALT;                 Action::HideOtherApplications;

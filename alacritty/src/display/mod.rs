@@ -482,7 +482,7 @@ impl Display {
         let rasterizer = Rasterizer::new()?;
 
         let font_size = config.font.size().scale(scale_factor);
-        debug!("Loading \"{}\" font", &config.font.normal().family);
+        debug!("Loading \"{}\" font", config.font.normal().family);
         let font = config.font.clone().with_size(font_size);
         let mut glyph_cache = GlyphCache::new(rasterizer, &font)?;
 
@@ -1059,16 +1059,17 @@ impl Display {
         };
 
         // Handle IME.
-        if focused && self.ime.is_enabled() {
-            if let Some(point) = ime_position {
-                let (fg, bg) = if search_state.regex().is_some() {
-                    (config.colors.footer_bar_foreground(), config.colors.footer_bar_background())
-                } else {
-                    (foreground_color, background_color)
-                };
+        if focused
+            && self.ime.is_enabled()
+            && let Some(point) = ime_position
+        {
+            let (fg, bg) = if search_state.regex().is_some() {
+                (config.colors.footer_bar_foreground(), config.colors.footer_bar_background())
+            } else {
+                (foreground_color, background_color)
+            };
 
-                self.draw_ime_preview(point, fg, bg, &mut rects, config);
-            }
+            self.draw_ime_preview(point, fg, bg, &mut rects, config);
         }
 
         if let Some(message) = message_buffer.message() {

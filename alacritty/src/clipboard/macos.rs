@@ -27,10 +27,10 @@ impl MimeClipboard {
         // Exact MIME names preserve aliases even when macOS canonicalizes their UTI.
         for index in 0..types.len() {
             let text = types.objectAtIndex(index).to_string();
-            if let Some(mime) = exact_mime(&text) {
-                if !formats.contains(&mime) {
-                    formats.push(mime);
-                }
+            if let Some(mime) = exact_mime(&text)
+                && !formats.contains(&mime)
+            {
+                formats.push(mime);
             }
             if formats.len() >= MAX_MIME_TYPES {
                 return formats;
@@ -50,10 +50,10 @@ impl MimeClipboard {
                     .and_then(|ty| ty.preferredMIMEType())
                     .map(|mime| mime.to_string())
             };
-            if let Some(mime) = mime {
-                if !formats.contains(&mime) {
-                    formats.push(mime);
-                }
+            if let Some(mime) = mime
+                && !formats.contains(&mime)
+            {
+                formats.push(mime);
             }
             if formats.len() >= MAX_MIME_TYPES {
                 break;
@@ -150,7 +150,9 @@ fn exact_mime(ty: &str) -> Option<String> {
     }
     let bytes: Option<Vec<_>> = encoded
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok())
         .collect();
     String::from_utf8(bytes?).ok()

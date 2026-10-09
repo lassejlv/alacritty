@@ -859,6 +859,8 @@ _https://docs.rs/winit/latest/winit/keyboard/enum.Key.html#variant.Dead_
 			Toggle fullscreen.
 		*ToggleMaximized*
 			Toggle maximized.
+		*SelectAll*
+			Select the active pane's entire buffer, including scrollback.
 		*ClearSelection*
 			Clear active selection.
 		*ToggleViMode*

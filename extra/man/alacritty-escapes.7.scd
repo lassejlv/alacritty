@@ -242,6 +242,12 @@ brevity.
 |  _OSC 52_
 :  Implemented
 :[ Only *clipboard* and *primary selection* supported
+|  _OSC 7501_
+:  Implemented
+:[ Program status reports and feature detection
+|  _OSC 133 ; A_
+:  Implemented
+:[ Clears working and blocked program status records at the shell prompt
 |  _OSC 104_
 :  Implemented
 :[

@@ -498,6 +498,10 @@ configuration. See *alacritty*(5) for full configuration format documentation.
 :  _"Command"_
 :  _"Vi|Search"_
 :  _"Paste"_
+|  _"A"_
+:  _"Command"_
+:[
+:  _"SelectAll"_
 |  _"C"_
 :  _"Command"_
 :[

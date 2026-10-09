@@ -12,6 +12,20 @@ paste, search, font sizing, clear scrollback, fullscreen, minimization, and tab
 navigation. Menu actions target the focused terminal. Native accelerators are
 removed when the corresponding terminal shortcut has been remapped in config.
 
+## Selection and context menu
+
+Cmd+A or Edit → Select All selects the focused pane's entire buffer, including
+scrollback. Copy with Cmd+C. On an alternate screen, selection covers only that
+screen. The shortcut can be remapped with the `SelectAll` binding action.
+
+Right-click or Control-click a pane to open its native macOS context menu. It
+includes Copy, Paste, Select All, Clear Selection, Find, Clear Scrollback, Split
+Right, Split Down, New Tab, and New Window. Copy and Clear Selection are disabled
+without a selection. Commands apply to the pane you clicked.
+
+Programs that enable mouse reporting still receive ordinary right-clicks. Hold
+Shift while right-clicking to open the native menu instead.
+
 ## Split panes
 
 Each native tab can contain multiple independent terminals. Splits can be nested:

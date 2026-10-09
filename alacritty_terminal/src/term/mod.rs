@@ -268,6 +268,7 @@ impl TermDamageState {
 }
 
 pub struct Term<T> {
+    program_status: crate::program_status::ProgramStatuses,
     graphics: crate::graphics::KittyGraphicsState,
     graphics_cell_size: (f32, f32),
     /// Terminal focus controlling the cursor shape.
@@ -427,6 +428,7 @@ impl<T> Term<T> {
         let damage = TermDamageState::new(num_cols, num_lines);
 
         Term {
+            program_status: Default::default(),
             graphics: Default::default(),
             graphics_cell_size: (1., 1.),
             inactive_grid,
@@ -838,7 +840,25 @@ impl<T> Term<T> {
     where
         T: EventListener,
     {
+        self.shell_prompt();
         self.event_proxy.send_event(Event::Exit);
+    }
+
+    /// OSC 7501 records for this terminal, independent of the active screen.
+    pub fn program_status(&self) -> &crate::program_status::ProgramStatuses {
+        &self.program_status
+    }
+
+    fn update_title(&self)
+    where
+        T: EventListener,
+    {
+        let title =
+            self.program_status.window_title(self.title.as_deref()).or_else(|| self.title.clone());
+        self.event_proxy.send_event(match title {
+            Some(title) => Event::Title(title),
+            None => Event::ResetTitle,
+        });
     }
 
     /// Toggle the vi mode.
@@ -1776,10 +1796,10 @@ impl<T: EventListener> Handler for Term<T> {
             _ => return,
         };
 
-        if let Ok(bytes) = Base64.decode(base64) {
-            if let Ok(text) = String::from_utf8(bytes) {
-                self.event_proxy.send_event(Event::ClipboardStore(clipboard_type, text));
-            }
+        if let Ok(bytes) = Base64.decode(base64)
+            && let Ok(text) = String::from_utf8(bytes)
+        {
+            self.event_proxy.send_event(Event::ClipboardStore(clipboard_type, text));
         }
     }
 
@@ -1905,6 +1925,8 @@ impl<T: EventListener> Handler for Term<T> {
     /// Reset all important fields in the term struct.
     #[inline]
     fn reset_state(&mut self) {
+        let had_status = !self.program_status.records().is_empty();
+        self.program_status.clear();
         self.event_proxy.send_event(Event::KittyClipboardReset);
         self.graphics = Default::default();
         if self.mode.contains(TermMode::ALT_SCREEN) {
@@ -1918,6 +1940,9 @@ impl<T: EventListener> Handler for Term<T> {
         self.tabs = TabStops::new(self.columns());
         self.title_stack = Vec::new();
         self.title = None;
+        if had_status {
+            self.update_title();
+        }
         self.selection = None;
         self.vi_mode_cursor = Default::default();
         self.keyboard_mode_stack = Default::default();
@@ -2312,14 +2337,26 @@ impl<T: EventListener> Handler for Term<T> {
     fn set_title(&mut self, title: Option<String>) {
         trace!("Setting title to '{title:?}'");
 
-        self.title.clone_from(&title);
+        self.title = title;
+        self.update_title();
+    }
 
-        let title_event = match title {
-            Some(title) => Event::Title(title),
-            None => Event::ResetTitle,
-        };
+    fn program_status(&mut self, body: &[u8], bell_terminated: bool) {
+        let terminator = if bell_terminated { "\x07" } else { "\x1b\\" };
+        if body.len() + 7 + terminator.len() > 4096 {
+            return;
+        }
+        if body == b"?" {
+            self.event_proxy.send_event(Event::PtyWrite(format!("\x1b]7501;?{terminator}")));
+        } else if self.program_status.apply(body) {
+            self.update_title();
+        }
+    }
 
-        self.event_proxy.send_event(title_event);
+    fn shell_prompt(&mut self) {
+        if self.program_status.finish() {
+            self.update_title();
+        }
     }
 
     #[inline]
@@ -2430,7 +2467,7 @@ impl TabStops {
     fn resize(&mut self, columns: usize) {
         let mut index = self.tabs.len();
         self.tabs.resize_with(columns, || {
-            let is_tabstop = index % INITIAL_TABSTOPS == 0;
+            let is_tabstop = index.is_multiple_of(INITIAL_TABSTOPS);
             index += 1;
             is_tabstop
         });

@@ -4,3 +4,7 @@ Kitty clipboard support adds OSC 5522 dispatch and private mode 5522. Clipboard
 OSC packets are bounded to 64 KiB and wait for the full ST before dispatch;
 oversized, cancelled, or malformed control packets cannot commit a write.
 Other OSC commands retain the upstream behavior.
+
+OSC 7501 adds program status dispatch with a bounded buffer and complete-ST
+validation. Its body preserves semicolons so the receiver can skip malformed
+pairs. OSC 133 A dispatches shell prompt boundaries for status cleanup.

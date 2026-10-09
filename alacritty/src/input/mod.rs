@@ -29,7 +29,7 @@ use winit::window::CursorIcon;
 use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Boundary, Column, Direction, Point, Side};
-use alacritty_terminal::selection::SelectionType;
+use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::search::Match;
 use alacritty_terminal::term::{ClipboardType, Term, TermMode};
 use alacritty_terminal::vi_mode::ViMotion;
@@ -335,6 +335,16 @@ impl<T: EventListener> Execute<T> for Action {
             #[cfg(not(any(target_os = "macos", windows)))]
             Action::CopySelection => ctx.copy_selection(ClipboardType::Selection),
             Action::ClearSelection => ctx.clear_selection(),
+            Action::SelectAll => {
+                let term = ctx.terminal_mut();
+                let start = Point::new(term.topmost_line(), Column(0));
+                let end = Point::new(term.bottommost_line(), term.last_column());
+                let mut selection = Selection::new(SelectionType::Simple, start, Side::Left);
+                selection.update(end, Side::Right);
+                term.selection = Some(selection);
+                ctx.mark_dirty();
+                ctx.copy_selection(ClipboardType::Selection);
+            },
             Action::Paste => {
                 ctx.paste_clipboard(ClipboardType::Clipboard);
             },
@@ -1303,6 +1313,62 @@ mod tests {
         fn semantic_word(&self, _point: Point) -> String {
             unimplemented!();
         }
+    }
+
+    #[test]
+    fn select_all_includes_scrollback_and_content_below_viewport() {
+        let cfg = UiConfig::default();
+        let size = SizeInfo::new(50., 20., 10., 10., 0., 0., false);
+        let mut terminal = Term::new(cfg.term_options(), &size, MockEventProxy);
+        let mut parser: alacritty_terminal::vte::ansi::Processor = Default::default();
+        parser.advance(&mut terminal, b"one\r\ntwo\r\nthree");
+        terminal.scroll_display(Scroll::Top);
+        let mut clipboard = Clipboard::new_nop();
+        let mut mouse = Mouse::default();
+        let mut message_buffer = MessageBuffer::default();
+        let mut inline_search_state = InlineSearchState::default();
+        let mut context = ActionContext {
+            terminal: &mut terminal,
+            size_info: &size,
+            mouse: &mut mouse,
+            clipboard: &mut clipboard,
+            modifiers: Default::default(),
+            message_buffer: &mut message_buffer,
+            inline_search_state: &mut inline_search_state,
+            config: &cfg,
+        };
+
+        Action::SelectAll.execute(&mut context);
+
+        assert_eq!(context.terminal.selection_to_string().unwrap().trim_end(), "one\ntwo\nthree");
+    }
+
+    #[test]
+    fn select_all_on_alternate_screen_excludes_primary_history() {
+        let cfg = UiConfig::default();
+        let size = SizeInfo::new(50., 20., 10., 10., 0., 0., false);
+        let mut terminal = Term::new(cfg.term_options(), &size, MockEventProxy);
+        let mut parser: alacritty_terminal::vte::ansi::Processor = Default::default();
+        parser.advance(&mut terminal, b"one\r\ntwo\r\nthree\x1b[?1049h\x1b[HALT");
+        terminal.scroll_display(Scroll::Top);
+        let mut clipboard = Clipboard::new_nop();
+        let mut mouse = Mouse::default();
+        let mut message_buffer = MessageBuffer::default();
+        let mut inline_search_state = InlineSearchState::default();
+        let mut context = ActionContext {
+            terminal: &mut terminal,
+            size_info: &size,
+            mouse: &mut mouse,
+            clipboard: &mut clipboard,
+            modifiers: Default::default(),
+            message_buffer: &mut message_buffer,
+            inline_search_state: &mut inline_search_state,
+            config: &cfg,
+        };
+
+        Action::SelectAll.execute(&mut context);
+
+        assert_eq!(context.terminal.selection_to_string().unwrap().trim_end(), "ALT");
     }
 
     macro_rules! test_clickstate {

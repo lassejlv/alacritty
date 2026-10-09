@@ -34,8 +34,7 @@ jobs:
         run: |
           brew install scdoc openssl@3
           echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
-          rustup update stable --no-self-update
-          rustup default stable
+          rustup show
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Test native architecture
         run: cargo test --locked --release --target=aarch64-apple-darwin

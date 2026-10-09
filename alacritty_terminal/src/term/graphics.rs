@@ -139,18 +139,18 @@ impl<T: EventListener> Term<T> {
         if result.changed {
             self.mark_fully_damaged();
         }
-        if let Some((cols, rows)) = result.cursor_advance {
-            if result.cursor_advance_screen.is_none_or(|target| target == screen) {
-                self.move_forward(cols.min(self.columns() as u32) as usize);
-                if self.scroll_region.start == 0
-                    && self.scroll_region.end.0 as usize == self.screen_lines()
-                {
-                    for _ in 0..rows.min(self.screen_lines() as u32) {
-                        self.linefeed();
-                    }
-                } else {
-                    self.move_down(rows.min(self.screen_lines() as u32) as usize);
+        if let Some((cols, rows)) = result.cursor_advance
+            && result.cursor_advance_screen.is_none_or(|target| target == screen)
+        {
+            self.move_forward(cols.min(self.columns() as u32) as usize);
+            if self.scroll_region.start == 0
+                && self.scroll_region.end.0 as usize == self.screen_lines()
+            {
+                for _ in 0..rows.min(self.screen_lines() as u32) {
+                    self.linefeed();
                 }
+            } else {
+                self.move_down(rows.min(self.screen_lines() as u32) as usize);
             }
         }
     }

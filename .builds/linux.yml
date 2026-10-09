@@ -32,12 +32,6 @@ tasks:
   - test: |
       cd alacritty
       cargo test
-  - oldstable: |
-      cd alacritty
-      oldstable=$(cat Cargo.toml | grep "rust-version" | sed 's/.*"\(.*\)".*/\1/')
-      rustup toolchain install --profile minimal $oldstable
-      rustup default $oldstable
-      cargo test
   - clippy: |
       cd alacritty
       rustup component add clippy

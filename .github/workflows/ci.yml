@@ -15,25 +15,22 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Stable
-        run: cargo test
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Workspace tests
+        run: cargo test --locked --workspace
       - name: VTE parser
         run: cargo test --locked -p vte
-      - name: Stable (no default features)
-        run: cargo test -p alacritty_terminal --no-default-features
-      - name: Oldstable
-        run: |
-          rustup default $(cat Cargo.toml | grep "rust-version" | sed 's/.*"\(.*\)".*/\1/')
-          cargo test
+      - name: No default features
+        run: cargo test --locked -p alacritty_terminal --no-default-features
       - name: Clippy
         run: |
-          rustup component add clippy
-          cargo clippy --all-targets
+          cargo clippy --all-targets --all-features --locked -- -D warnings
   check-macos-x86_64:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install target
-        run: rustup update && rustup target add x86_64-apple-darwin
+        run: rustup target add x86_64-apple-darwin
       - name: Build
-        run: cargo build --target=x86_64-apple-darwin
+        run: cargo build --locked --target=x86_64-apple-darwin

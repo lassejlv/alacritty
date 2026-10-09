@@ -335,7 +335,9 @@ fn composite(
             destination.copy_from_slice(source);
             continue;
         }
-        for (source, destination) in source.chunks_exact(4).zip(destination.chunks_exact_mut(4)) {
+        for (source, destination) in
+            source.as_chunks::<4>().0.iter().zip(destination.as_chunks_mut::<4>().0.iter_mut())
+        {
             let alpha = u32::from(source[3]);
             if alpha == 0 {
                 continue;

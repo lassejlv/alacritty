@@ -344,7 +344,7 @@ impl WriteTransaction {
         entry.encoded.extend_from_slice(payload);
         // Existing kitten clients pad each packet. Newer clients can split a
         // continuous encoded stream anywhere, including inside its final padding.
-        if entry.encoded.len() % 4 == 0 && payload.last() == Some(&b'=') {
+        if entry.encoded.len().is_multiple_of(4) && payload.last() == Some(&b'=') {
             self.finish_entry()?;
         }
         Ok(())
@@ -684,10 +684,8 @@ impl KittyClipboardHostState {
                 contents,
                 remember_permission,
             } => {
-                if remember_permission {
-                    if let Some(password) = password {
-                        self.remember_grant(packet.metadata.location, password, GrantKind::Read);
-                    }
+                if remember_permission && let Some(password) = password {
+                    self.remember_grant(packet.metadata.location, password, GrantKind::Read);
                 }
                 read_success_responses(
                     &id,
@@ -809,10 +807,8 @@ impl KittyClipboardHostState {
             TerminalClipboardWriteResult::InvalidData => ("EINVAL", false),
             TerminalClipboardWriteResult::IoError => ("EIO", false),
         };
-        if remember {
-            if let Some(password) = password {
-                self.remember_grant(location, password, GrantKind::Write);
-            }
+        if remember && let Some(password) = password {
+            self.remember_grant(location, password, GrantKind::Write);
         }
         vec![response("write", status, &id, &[], None, terminator)]
     }

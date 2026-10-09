@@ -42,9 +42,9 @@ and
 [easy](https://github.com/alacritty/alacritty/issues?q=is%3Aopen+is%3Aissue+label%3A%22D+-+easy%22)
 issues.
 
-You can find the minimum supported Rust version in Alacritty's manifest file
-(`cat alacritty/Cargo.toml | grep "rust-version"`). Alacritty **must** always
-build with the MSRV and bumping it should be avoided if possible.
+The workspace's minimum supported Rust version is in the root `Cargo.toml`.
+`rust-toolchain.toml` selects the compiler used for development and CI. Keep these
+versions aligned when updating the toolchain.
 
 Since `alacritty_terminal`'s version always tracks the next release, make sure that the version is
 bumped according to semver when necessary.
