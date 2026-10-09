@@ -115,17 +115,38 @@ impl Layout {
     }
 
     /// A path identifies a divider independently of the pointer's later position.
-    pub fn divider_at(&self, bounds: Rect, gap: f32, x: f32, y: f32) -> Option<(Vec<bool>, Axis)> {
+    pub fn divider_at(
+        &self,
+        bounds: Rect,
+        gap: f32,
+        hit_padding: f32,
+        x: f32,
+        y: f32,
+    ) -> Option<(Vec<bool>, Axis)> {
+        if !bounds.contains(x, y) {
+            return None;
+        }
         match self {
             Self::Leaf(_) => None,
             Self::Split { axis, ratio, first, second } => {
-                let (a, b, divider) = Self::children(bounds, *axis, *ratio, gap);
+                let (a, b, mut divider) = Self::children(bounds, *axis, *ratio, gap);
+                // Keep hairline dividers easy to grab without reserving a wide gutter.
+                match axis {
+                    Axis::Horizontal => {
+                        divider.x -= hit_padding;
+                        divider.width += 2. * hit_padding;
+                    },
+                    Axis::Vertical => {
+                        divider.y -= hit_padding;
+                        divider.height += 2. * hit_padding;
+                    },
+                }
                 if divider.contains(x, y) {
                     return Some((Vec::new(), *axis));
                 }
                 let (child, rect, side) =
                     if a.contains(x, y) { (first, a, false) } else { (second, b, true) };
-                let (mut path, axis) = child.divider_at(rect, gap, x, y)?;
+                let (mut path, axis) = child.divider_at(rect, gap, hit_padding, x, y)?;
                 path.insert(0, side);
                 Some((path, axis))
             },
@@ -204,14 +225,53 @@ mod tests {
         let mut layout = Layout::Leaf(0);
         layout.split(0, 1, Axis::Horizontal);
         layout.split(1, 2, Axis::Horizontal);
-        let (path, axis) = layout.divider_at(bounds(), 4., 499., 50.).unwrap();
+        let (path, axis) = layout.divider_at(bounds(), 4., 0., 499., 50.).unwrap();
         assert_eq!(axis, Axis::Horizontal);
         layout.drag(&path, bounds(), 4., (990., 50.), (100., 50.));
         let rects = layout.rects(bounds(), 4.);
         assert!(rects.iter().all(|(_, r)| r.width >= 100.));
         assert_eq!(rects[0].1.width, 792.);
-        assert!(layout.divider_at(bounds(), 4., 20., 20.).is_none());
+        assert!(layout.divider_at(bounds(), 4., 0., 20., 20.).is_none());
     }
+
+    #[test]
+    fn hairline_dividers_have_a_wider_drag_target() {
+        for axis in [Axis::Horizontal, Axis::Vertical] {
+            let mut layout = Layout::Leaf(0);
+            layout.split(0, 1, axis);
+            let rects = layout.rects(bounds(), 1.);
+            let (edge, next) = match axis {
+                Axis::Horizontal => (rects[0].1.width, rects[1].1.x),
+                Axis::Vertical => (rects[0].1.height, rects[1].1.y),
+            };
+            assert_eq!(next - edge, 1.);
+            for offset in [-3., -1., 0., 1., 3.] {
+                let (x, y) = match axis {
+                    Axis::Horizontal => (edge + offset, 50.),
+                    Axis::Vertical => (50., edge + offset),
+                };
+                assert_eq!(layout.divider_at(bounds(), 1., 3., x, y), Some((vec![], axis)));
+            }
+            let (x, y) = match axis {
+                Axis::Horizontal => (edge - 4., 50.),
+                Axis::Vertical => (50., edge - 4.),
+            };
+            assert!(layout.divider_at(bounds(), 1., 3., x, y).is_none());
+        }
+    }
+
+    #[test]
+    fn nested_divider_hit_area_stays_inside_its_panes() {
+        let mut layout = Layout::Leaf(0);
+        layout.split(0, 1, Axis::Horizontal);
+        layout.split(1, 2, Axis::Vertical);
+        let hit = layout.divider_at(bounds(), 1., 3., 750., 297.);
+        assert_eq!(hit, Some((vec![true], Axis::Vertical)));
+        assert!(layout.divider_at(bounds(), 1., 3., 250., 297.).is_none());
+        assert!(layout.divider_at(bounds(), 1., 3., 1001., 297.).is_none());
+        assert!(layout.divider_at(bounds(), 1., 3., 499., -1.).is_none());
+    }
+
     #[test]
     fn closing_a_nested_branch_preserves_sibling_ids_and_order() {
         let mut layout = Layout::Leaf(0);

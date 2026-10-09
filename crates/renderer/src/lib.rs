@@ -306,6 +306,26 @@ impl Renderer {
         }
     }
 
+    /// Tint the current pane toward `color` without changing its opacity.
+    pub fn draw_overlay(&mut self, size: &SizeInfo, metrics: &Metrics, color: Rgb, alpha: f32) {
+        let rect = RenderRect::new(0., 0., size.width(), size.height(), color * alpha, alpha);
+
+        // SAFETY: The caller has made this renderer's context current. The loaded GL
+        // functions only change its viewport and blending state, restored below.
+        unsafe {
+            gl::Viewport(self.origin.0, self.origin.1, size.width() as i32, size.height() as i32);
+            // Both the tint and framebuffer use premultiplied colors. Scale the tint
+            // by each pixel's opacity so transparent backgrounds remain transparent.
+            gl::BlendFuncSeparate(gl::DST_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ZERO, gl::ONE);
+        }
+        self.rect_renderer.draw(size, metrics, vec![rect]);
+        // SAFETY: The same context is still current.
+        unsafe {
+            gl::BlendFunc(gl::SRC1_COLOR, gl::ONE_MINUS_SRC1_COLOR);
+        }
+        self.set_viewport(size);
+    }
+
     /// Fill the window with `color` and `alpha`.
     pub fn clear(&self, color: Rgb, alpha: f32) {
         unsafe {

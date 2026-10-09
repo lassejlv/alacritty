@@ -28,6 +28,8 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 
 ### Changed
 
+- Replace split-pane focus borders with thin dividers and dimmed inactive panes
+
 - Organize the Cargo workspace under `crates/`, with separate session and renderer libraries
 
 - Minimum Rust version has been bumped to 1.99.0

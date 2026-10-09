@@ -49,8 +49,9 @@ Each native tab can contain multiple independent terminals. Splits can be nested
 | Close the focused pane | Cmd+W | File → Close Pane |
 | Close the entire tab and its panes | Cmd+Shift+W | File → Close Tab |
 
-Click a pane to focus it, or drag a divider to resize its terminals. A subtle
-outline identifies the focused pane. New panes inherit the foreground process's
+Click a pane to focus it, or drag a divider to resize its terminals. Panes have
+thin, neutral dividers and no focus border. Inactive panes are gently dimmed;
+the focused pane keeps its full contrast. New panes inherit the foreground process's
 working directory and start a new shell. Each pane keeps its own scrollback,
 selection, search, terminal colors, and cursor state. Scrolling targets the pane
 under the pointer without changing keyboard focus. Font zoom is independent for each pane. Cmd+Plus, Cmd+Minus, and Cmd+0

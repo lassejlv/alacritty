@@ -1014,17 +1014,8 @@ impl Display {
         if self.composite {
             self.damage_tracker.swap_damage();
         }
-        if self.composite && focused {
-            let color = config.colors.normal.blue;
-            let w = size_info.width();
-            let h = size_info.height();
-            let thickness = self.window.scale_factor as f32;
-            self.renderer.draw_rects(&size_info, &metrics, vec![
-                RenderRect::new(0., 0., w, thickness, color, 1.),
-                RenderRect::new(0., h - thickness, w, thickness, color, 1.),
-                RenderRect::new(0., 0., thickness, h, color, 1.),
-                RenderRect::new(w - thickness, 0., thickness, h, color, 1.),
-            ]);
+        if self.composite && !focused {
+            self.renderer.draw_overlay(&size_info, &metrics, background_color, 0.15);
         }
         next_animation
     }
@@ -1036,7 +1027,7 @@ impl Display {
         self.renderer.prune_images();
         let bg = config.colors.primary.background;
         let fg = config.colors.primary.foreground;
-        let mix = |a: u8, b: u8| ((u16::from(a) * 4 + u16::from(b)) / 5) as u8;
+        let mix = |a: u8, b: u8| ((u16::from(a) * 11 + u16::from(b)) / 12) as u8;
         self.renderer.clear(
             Rgb::new(mix(bg.r, fg.r), mix(bg.g, fg.g), mix(bg.b, fg.b)),
             config.window_opacity(),

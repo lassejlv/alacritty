@@ -318,7 +318,12 @@ impl WindowContext {
     }
 
     fn gap(&self) -> f32 {
-        (4. * self.display.window.scale_factor as f32).round()
+        1.
+    }
+
+    fn divider_at(&self, x: f32, y: f32) -> Option<(Vec<bool>, Axis)> {
+        let hit_padding = 3. * self.display.window.scale_factor as f32;
+        self.layout.divider_at(self.bounds(), self.gap(), hit_padding, x, y)
     }
 
     fn rects(&self) -> Vec<(PaneId, Rect)> {
@@ -683,12 +688,8 @@ impl WindowContext {
                         let pressed = self.pane.mouse.left_button_state == ElementState::Pressed
                             || self.pane.mouse.right_button_state == ElementState::Pressed;
                         if !pressed
-                            && let Some((_, axis)) = self.layout.divider_at(
-                                self.bounds(),
-                                self.gap(),
-                                position.x as f32,
-                                position.y as f32,
-                            )
+                            && let Some((_, axis)) =
+                                self.divider_at(position.x as f32, position.y as f32)
                         {
                             self.display.window.set_mouse_cursor(match axis {
                                 Axis::Horizontal => CursorIcon::ColResize,
@@ -742,12 +743,9 @@ impl WindowContext {
                         {
                             self.context_menu_button = None;
                         }
-                        if let Some((path, _)) = self.layout.divider_at(
-                            self.bounds(),
-                            self.gap(),
-                            self.pointer.x as f32,
-                            self.pointer.y as f32,
-                        ) {
+                        if let Some((path, _)) =
+                            self.divider_at(self.pointer.x as f32, self.pointer.y as f32)
+                        {
                             if *button == MouseButton::Left {
                                 self.divider_drag = Some(path);
                             }
