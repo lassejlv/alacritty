@@ -693,6 +693,7 @@ pub enum EventType {
     IpcGetConfig(Arc<UnixStream>),
     BlinkCursor,
     BlinkCursorTimeout,
+    GraphicsAnimation,
     SearchNext,
     #[cfg(unix)]
     Shutdown,
@@ -2028,6 +2029,7 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                 },
                 #[cfg(target_os = "macos")]
                 EventType::MacosMenu(..) => (),
+                EventType::GraphicsAnimation => self.ctx.mark_dirty(),
                 EventType::SearchNext => self.ctx.goto_match(None),
                 EventType::Scroll(scroll) => self.ctx.scroll(scroll),
                 EventType::BlinkCursor => {

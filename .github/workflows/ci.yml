@@ -17,6 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Stable
         run: cargo test
+      - name: VTE parser
+        run: cargo test --locked -p vte
       - name: Stable (no default features)
         run: cargo test -p alacritty_terminal --no-default-features
       - name: Oldstable

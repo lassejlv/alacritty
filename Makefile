@@ -58,6 +58,7 @@ $(APP_NAME)-%: $(TARGET)-%
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
 	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
 	@cp -fp $(COMPLETIONS) $(APP_COMPLETIONS_DIR)
+	@cp -fp alacritty_terminal/src/graphics/LICENSE-MIT $(APP_EXTRAS_DIR)/Kitty-Graphics-LICENSE.txt
 	@bash scripts/release/embed-sparkle.sh "$(APP_DIR)/$(APP_NAME)"
 	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
 	@codesign --remove-signature "$(APP_DIR)/$(APP_NAME)"

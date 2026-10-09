@@ -28,6 +28,7 @@ use crate::vte::ansi::{
 
 pub mod cell;
 pub mod color;
+mod graphics;
 pub mod search;
 
 /// Minimum number of columns.
@@ -266,6 +267,8 @@ impl TermDamageState {
 }
 
 pub struct Term<T> {
+    graphics: crate::graphics::KittyGraphicsState,
+    graphics_cell_size: (f32, f32),
     /// Terminal focus controlling the cursor shape.
     pub is_focused: bool,
 
@@ -423,6 +426,8 @@ impl<T> Term<T> {
         let damage = TermDamageState::new(num_cols, num_lines);
 
         Term {
+            graphics: Default::default(),
+            graphics_cell_size: (1., 1.),
             inactive_grid,
             scroll_region,
             event_proxy,
@@ -510,9 +515,19 @@ impl<T> Term<T> {
         self.event_proxy.send_event(title_event);
 
         if self.mode.contains(TermMode::ALT_SCREEN) {
+            let before = self.inactive_grid.history_size();
             self.inactive_grid.update_history(self.config.scrolling_history);
+            self.graphics.scroll_up_without_history_on_screen(
+                before.saturating_sub(self.inactive_grid.history_size()),
+                crate::graphics::KittyGraphicsScreen::Primary,
+            );
         } else {
+            let before = self.grid.history_size();
             self.grid.update_history(self.config.scrolling_history);
+            self.graphics.scroll_up_without_history_on_screen(
+                before.saturating_sub(self.grid.history_size()),
+                crate::graphics::KittyGraphicsScreen::Primary,
+            );
         }
 
         if self.config.kitty_keyboard != old_config.kitty_keyboard {
@@ -700,6 +715,7 @@ impl<T> Term<T> {
         // Reset scrolling region.
         self.scroll_region = Line(0)..Line(self.screen_lines() as i32);
 
+        self.graphics.resize(self.graphics_size());
         // Resize damage information.
         self.damage.resize(num_cols, num_lines);
     }
@@ -719,7 +735,8 @@ impl<T> Term<T> {
             // Drop information about the primary screens saved cursor.
             self.grid.saved_cursor = self.grid.cursor.clone();
 
-            // Reset alternate screen contents.
+            // Reset alternate screen contents and its image placements.
+            self.graphics.clear_visible_on_screen(crate::graphics::KittyGraphicsScreen::Alternate);
             self.inactive_grid.reset_region(..);
         }
 
@@ -759,6 +776,13 @@ impl<T> Term<T> {
 
         // Scroll between origin and bottom
         self.grid.scroll_down(&region, lines);
+        self.graphics.scroll_region_on_screen(
+            self.graphics_screen(),
+            origin.0 as usize,
+            self.scroll_region.end.0 as usize,
+            -(lines as i64),
+            self.history_size(),
+        );
         self.mark_fully_damaged();
     }
 
@@ -777,7 +801,9 @@ impl<T> Term<T> {
         // Scroll selection.
         self.selection = self.selection.take().and_then(|s| s.rotate(self, &region, lines as i32));
 
+        let history_before = self.history_size();
         self.grid.scroll_up(&region, lines);
+        self.graphics_scrolled_up(origin, lines, history_before);
 
         // Scroll vi mode cursor.
         let viewport_top = Line(-(self.grid.display_offset() as i32));
@@ -1057,6 +1083,14 @@ impl<T> Dimensions for Term<T> {
 }
 
 impl<T: EventListener> Handler for Term<T> {
+    fn apc_dispatch(&mut self, data: &[u8], truncated: bool) {
+        self.apply_graphics(data.to_vec(), truncated);
+    }
+
+    fn apc_dispatch_owned(&mut self, data: Vec<u8>, truncated: bool) {
+        self.apply_graphics(data, truncated);
+    }
+
     /// A character to be displayed.
     #[inline(never)]
     fn input(&mut self, c: char) {
@@ -1258,7 +1292,9 @@ impl<T: EventListener> Handler for Term<T> {
         match intermediate {
             None => {
                 trace!("Reporting primary device attributes");
-                let text = String::from("\x1b[?6c");
+                // Advertise ANSI color using a feature-bearing DA1 response. Graphics clients
+                // use this response to recognize the end of capability probing.
+                let text = String::from("\x1b[?62;22c");
                 self.event_proxy.send_event(Event::PtyWrite(text));
             },
             Some('>') => {
@@ -1786,6 +1822,12 @@ impl<T: EventListener> Handler for Term<T> {
                 self.selection = self.selection.take().filter(|s| !s.intersects_range(range));
             },
             ansi::ClearMode::All => {
+                self.graphics.clear_viewport_on_screen(
+                    self.graphics_screen(),
+                    self.history_size(),
+                    self.screen_lines(),
+                    self.columns(),
+                );
                 if self.mode.contains(TermMode::ALT_SCREEN) {
                     self.grid.reset_region(..);
                 } else {
@@ -1803,6 +1845,10 @@ impl<T: EventListener> Handler for Term<T> {
                 self.selection = None;
             },
             ansi::ClearMode::Saved if self.history_size() > 0 => {
+                self.graphics.scroll_up_without_history_on_screen(
+                    self.history_size(),
+                    self.graphics_screen(),
+                );
                 self.grid.clear_history();
 
                 self.vi_mode_cursor.point.line =
@@ -1833,6 +1879,7 @@ impl<T: EventListener> Handler for Term<T> {
     /// Reset all important fields in the term struct.
     #[inline]
     fn reset_state(&mut self) {
+        self.graphics = Default::default();
         if self.mode.contains(TermMode::ALT_SCREEN) {
             mem::swap(&mut self.grid, &mut self.inactive_grid);
         }

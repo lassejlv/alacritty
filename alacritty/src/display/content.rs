@@ -229,7 +229,8 @@ impl RenderableCell {
         let display_offset = content.terminal_content.display_offset;
         let viewport_start = Point::new(Line(-(display_offset as i32)), Column(0));
         let colors = &content.config.colors;
-        let mut character = cell.c;
+        let placeholder = cell.c == alacritty_terminal::graphics::unicode::PLACEHOLDER;
+        let mut character = if placeholder { ' ' } else { cell.c };
         let mut flags = cell.flags;
 
         let num_cols = content.size.columns();
@@ -285,7 +286,7 @@ impl RenderableCell {
             .underline_color()
             .map_or(fg, |underline| Self::compute_fg_rgb(content, underline, flags));
 
-        let zerowidth = cell.zerowidth();
+        let zerowidth = if placeholder { None } else { cell.zerowidth() };
         let hyperlink = cell.hyperlink();
 
         let extra = (zerowidth.is_some() || hyperlink.is_some()).then(|| {
