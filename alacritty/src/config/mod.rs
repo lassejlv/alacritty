@@ -146,6 +146,32 @@ pub fn load(options: &mut Options) -> UiConfig {
     config
 }
 
+/// Ensure there is a main config file to edit, without overwriting existing contents.
+#[cfg(target_os = "macos")]
+pub fn editable_config(config: &UiConfig) -> io::Result<PathBuf> {
+    let path = match config.config_paths.first() {
+        Some(path) => path.clone(),
+        None => installed_config("toml")
+            .or_else(|| installed_config("yml"))
+            .map(Ok)
+            .unwrap_or_else(|| {
+                xdg::BaseDirectories::with_prefix("alacritty").place_config_file("alacritty.toml")
+            })?,
+    };
+
+    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)?;
+    }
+    match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(_) => (),
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+        Err(err) => return Err(err),
+    }
+
+    // The editor process may inherit the shell's cwd, so pass an absolute path.
+    std::path::absolute(path)
+}
+
 /// Attempt to reload the configuration file.
 pub fn reload(config_path: &Path, options: &mut Options) -> Result<UiConfig> {
     debug!("Reloading configuration file: {config_path:?}");
@@ -406,6 +432,32 @@ pub fn installed_config(suffix: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn edit_main_config_preserves_contents_and_imports() {
+        let dir = tempfile::tempdir().unwrap();
+        let main = dir.path().join("custom config.toml");
+        let theme = dir.path().join("theme.toml");
+        fs::write(&main, "invalid config worth preserving").unwrap();
+        fs::write(&theme, "# theme").unwrap();
+        let mut config = UiConfig::default();
+        config.config_paths = vec![main.clone(), theme.clone()];
+        assert_eq!(editable_config(&config).unwrap(), std::path::absolute(&main).unwrap());
+        assert_eq!(fs::read_to_string(main).unwrap(), "invalid config worth preserving");
+        assert_eq!(fs::read_to_string(theme).unwrap(), "# theme");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn edit_missing_config_creates_parent_and_valid_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/alacritty.toml");
+        let mut config = UiConfig::default();
+        config.config_paths = vec![path.clone()];
+        assert_eq!(editable_config(&config).unwrap(), std::path::absolute(&path).unwrap());
+        assert!(read_config(&path).is_ok());
+    }
 
     #[test]
     fn empty_config() {

@@ -36,15 +36,15 @@ impl ConfigMonitor {
             return None;
         }
 
-        // Calculate the hash for the unmodified list of paths.
-        let watched_hash = Self::hash_paths(&paths);
-
         // Exclude char devices like `/dev/null`, sockets, and so on, by checking that file type is
         // a regular file.
         paths.retain(|path| {
             // Call `metadata` to resolve symbolic links.
             path.metadata().is_ok_and(|metadata| metadata.file_type().is_file())
         });
+
+        // Track paths actually watched so newly created configs restart the monitor.
+        let watched_hash = Self::hash_paths(&paths);
 
         // Canonicalize paths, keeping the base paths for symlinks.
         for i in 0..paths.len() {

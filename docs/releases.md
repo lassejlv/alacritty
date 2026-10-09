@@ -17,6 +17,48 @@ Intel is cross-compiled and included but not runtime-tested on that runner.
 The app and DMG are Developer ID signed, notarized, stapled, and assessed with
 Gatekeeper. The ZIP is made from the final stapled app.
 
+## macOS automatic updates
+
+Packaged apps include Sparkle 2.10.0 for Intel and Apple Silicon. Sparkle checks
+every six hours, and **Alacritty → Check for Updates…** checks immediately.
+The native updater offers downloads and asks before installing and relaunching;
+automatic installation is disabled to avoid interrupting terminal sessions.
+Quit or finish running commands before choosing to install and relaunch.
+Standalone Cargo binaries do not initialize an updater.
+
+Release tags must be `vMAJOR.MINOR.PATCH` (or `MAJOR.MINOR.PATCH`), e.g. `v0.18.0`.
+Publish the GitHub release with the prerelease checkbox enabled. The workflow
+stamps that version into both bundle version fields before signing, signs the
+final ZIP and appcast with Ed25519, and attaches `appcast.xml` alongside the
+downloads. The feed lives at
+`https://github.com/lassejlv/alacritty/releases/latest/download/appcast.xml`;
+its archive URL always includes the specific release tag. Promoting the release
+to Latest switches the feed only after all uploaded assets have been verified.
+Sparkle verifies the feed and archive before extracting the update. Do not edit
+the generated appcast after signing it or replace published release archives.
+
+The first build with Sparkle must be installed manually. Older Alacritty builds
+without an updater cannot acquire this feature automatically. Before the first
+release, manual update checks report that the feed is unavailable.
+
+Manual workflow builds use bundle build number `0` and a validation-only archive
+URL. They upload signed artifacts without making an update available to users.
+Local `make app` / `make app-universal` fetch the pinned Sparkle distribution,
+verify its SHA-256, and embed it with symlinks intact. Plain `cargo build` stays
+independent of the downloaded framework.
+
+Set the **`SPARKLE_PRIVATE_KEY`** Actions secret to the exported base64 Ed25519
+seed from Sparkle's `generate_keys`. The matching public key is committed in the
+app's Info.plist. The release script checks that the private key matches this
+public key before generating the feed. Keep the recovery export outside the
+repo with restrictive permissions; never regenerate this key for each release.
+Sparkle's framework, updater app, and XPC helpers are Developer ID signed from
+the inside out before signing/notarizing the outer app.
+
+References: [Sparkle setup](https://sparkle-project.org/documentation/),
+[update behavior](https://sparkle-project.org/documentation/customization/),
+[publishing updates](https://sparkle-project.org/documentation/publishing/).
+
 ## Apple credentials
 
 Set repository variable `APPLE_TEAM_ID` and these Actions secrets:

@@ -454,6 +454,10 @@ configuration. See *alacritty*(5) for full configuration format documentation.
 :[ *mods*
 :[ *mode*
 :[ *action* / *chars*
+|  _","_
+:  _"Command"_
+:[
+:  _"OpenConfig"_
 |  _"K"_
 :  _"Command"_
 :  _"~Vi|~Search"_

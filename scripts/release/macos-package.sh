@@ -13,7 +13,15 @@ work=$(mktemp -d "$RUNNER_TEMP/alacritty-package.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p dist
 sign=(--force --sign "$APPLE_SIGN_IDENTITY" --keychain "$APPLE_SIGNING_KEYCHAIN" --timestamp)
-# Alacritty contains one Mach-O executable and no bundled runtime/frameworks.
+# Sign Sparkle from the inside out; --deep is only used for verification.
+framework="$app/Contents/Frameworks/Sparkle.framework"
+sparkle="$framework/Versions/B"
+[[ -d "$sparkle" ]] || { echo 'The embedded Sparkle framework is missing.' >&2; exit 1; }
+for helper in "$sparkle/Autoupdate" "$sparkle/Updater.app" \
+    "$sparkle/XPCServices/Downloader.xpc" "$sparkle/XPCServices/Installer.xpc"; do
+    codesign "${sign[@]}" --options runtime --preserve-metadata=entitlements "$helper"
+done
+codesign "${sign[@]}" --options runtime "$framework"
 codesign "${sign[@]}" --options runtime "$binary"
 codesign "${sign[@]}" --options runtime "$app"
 codesign --verify --deep --strict --verbose=2 "$app"

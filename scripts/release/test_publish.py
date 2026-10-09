@@ -31,7 +31,8 @@ class PublishTests(unittest.TestCase):
             dist = root / 'dist'
             dist.mkdir()
             files = {'Alacritty-macos-universal.zip': b'zip',
-                     'Alacritty-macos-universal.dmg': b'dmg'}
+                     'Alacritty-macos-universal.dmg': b'dmg',
+                     'appcast.xml': b'<rss>signed feed fixture</rss>'}
             files['SHA256SUMS-macos.txt'] = ''.join(
                 f'{hashlib.sha256(data).hexdigest()}  {name}\n'
                 for name, data in files.items()
@@ -45,6 +46,8 @@ class PublishTests(unittest.TestCase):
                 assets[0]['digest'] = 'sha256:bad'
             if scenario == 'bad-checksum':
                 (dist / 'Alacritty-macos-universal.zip').write_bytes(b'corrupt')
+            if scenario == 'missing-appcast':
+                (dist / 'appcast.xml').unlink()
             release = root / 'release.json'
             release.write_text(json.dumps({'tag_name': 'v1.0.0', 'draft': False,
                                           'prerelease': scenario != 'stable',
@@ -71,11 +74,11 @@ class PublishTests(unittest.TestCase):
             else:
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(promotions, [])
-                if scenario in ('bad-checksum', 'stable'):
+                if scenario in ('bad-checksum', 'stable', 'missing-appcast'):
                     self.assertEqual(uploads, [])
 
     def test_promotion_gates(self):
-        for scenario in ('success', 'upload-failure', 'digest-mismatch', 'bad-checksum', 'stable'):
+        for scenario in ('success', 'upload-failure', 'digest-mismatch', 'bad-checksum', 'stable', 'missing-appcast'):
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
 

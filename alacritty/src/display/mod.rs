@@ -467,6 +467,8 @@ impl Display {
 
         // Clear screen.
         let background_color = config.colors.primary.background;
+        #[cfg(target_os = "macos")]
+        window.set_titlebar_color(background_color);
         renderer.clear(background_color, config.window_opacity());
 
         // Disable shadows for transparent windows on macOS.
@@ -835,6 +837,8 @@ impl Display {
         // Make sure this window's OpenGL context is active.
         self.make_current();
 
+        #[cfg(target_os = "macos")]
+        self.window.set_titlebar_color(background_color);
         self.renderer.clear(background_color, config.window_opacity());
         let mut lines = RenderLines::new();
 

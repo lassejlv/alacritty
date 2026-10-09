@@ -3,6 +3,9 @@ set -euo pipefail
 : "${GH_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${RELEASE_ID:?}" "${RELEASE_TAG:?}"
 [[ "$RELEASE_ID" =~ ^[0-9]+$ ]] || exit 1
 cd dist
+for asset in Alacritty-macos-universal.zip Alacritty-macos-universal.dmg appcast.xml SHA256SUMS-macos.txt; do
+    [[ -s "$asset" ]] || { echo "Missing release asset: $asset" >&2; exit 1; }
+done
 sha256sum --check SHA256SUMS-macos.txt
 # Validate the immutable release ID before uploading anything to its tag.
 release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")

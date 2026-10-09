@@ -217,6 +217,9 @@ pub enum Action {
     /// Select the last tab.
     SelectLastTab,
 
+    /// Open the active configuration file in a text editor on macOS.
+    OpenConfig,
+
     /// Create a new Alacritty window.
     CreateNewWindow,
 
@@ -581,6 +584,7 @@ pub fn platform_key_bindings() -> Vec<KeyBinding> {
     bindings!(
         KeyBinding;
         Insert, ModifiersState::SHIFT, ~BindingMode::VI, ~BindingMode::SEARCH; Action::Esc("\x1b[2;2~".into());
+        ",",    ModifiersState::SUPER;                                         Action::OpenConfig;
         // Tabbing api.
         "t",    ModifiersState::SUPER;                                         Action::CreateNewTab;
         "]",    ModifiersState::SUPER | ModifiersState::SHIFT;                 Action::SelectNextTab;

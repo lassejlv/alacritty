@@ -100,6 +100,8 @@ pub trait ActionContext<T: EventListener> {
     fn terminal_mut(&mut self) -> &mut Term<T>;
     fn spawn_new_instance(&mut self) {}
     #[cfg(target_os = "macos")]
+    fn open_config(&mut self) {}
+    #[cfg(target_os = "macos")]
     fn create_new_window(&mut self, _tabbing_id: Option<String>) {}
     #[cfg(not(target_os = "macos"))]
     fn create_new_window(&mut self) {}
@@ -406,6 +408,8 @@ impl<T: EventListener> Execute<T> for Action {
             #[cfg(not(target_os = "macos"))]
             Action::CreateNewWindow => ctx.create_new_window(),
             Action::SpawnNewInstance => ctx.spawn_new_instance(),
+            #[cfg(target_os = "macos")]
+            Action::OpenConfig => ctx.open_config(),
             #[cfg(target_os = "macos")]
             Action::CreateNewWindow => ctx.create_new_window(None),
             #[cfg(target_os = "macos")]

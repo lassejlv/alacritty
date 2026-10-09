@@ -98,6 +98,8 @@ pub struct Processor {
     global_ipc_options: ParsedOptions,
     cli_options: CliOptions,
     config: Rc<UiConfig>,
+    #[cfg(target_os = "macos")]
+    updater: Option<crate::macos::updater::Updater>,
 }
 
 impl Processor {
@@ -141,6 +143,8 @@ impl Processor {
             #[cfg(unix)]
             global_ipc_options: Default::default(),
             config_monitor,
+            #[cfg(target_os = "macos")]
+            updater: None,
         }
     }
 
@@ -162,6 +166,11 @@ impl Processor {
 
         self.gl_config = Some(window_context.display.gl_context().config());
         self.windows.insert(window_context.id(), window_context);
+
+        #[cfg(target_os = "macos")]
+        {
+            self.updater = crate::macos::updater::Updater::new();
+        }
 
         Ok(())
     }
@@ -362,6 +371,11 @@ impl ApplicationHandler<Event> for Processor {
                         } else {
                             Some(monitor)
                         };
+                    } else if self.config.live_config_reload() {
+                        self.config_monitor = ConfigMonitor::new(
+                            self.config.config_paths.clone(),
+                            self.proxy.clone(),
+                        );
                     }
 
                     for window_context in self.windows.values_mut() {
@@ -900,6 +914,19 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
         let _ = self
             .event_proxy
             .send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
+    }
+
+    #[cfg(target_os = "macos")]
+    fn open_config(&mut self) {
+        match config::editable_config(self.config) {
+            Ok(path) => {
+                // Pick up a newly created config and start monitoring it before editing.
+                let event = Event::new(EventType::ConfigReload(path.clone()), None);
+                let _ = self.event_proxy.send_event(event);
+                self.spawn_daemon("/usr/bin/open", [OsStr::new("-t"), path.as_os_str()]);
+            },
+            Err(err) => error!(target: LOG_TARGET_CONFIG, "Unable to open config: {err}"),
+        }
     }
 
     fn spawn_daemon<I, S>(&self, program: &str, args: I)
