@@ -6,7 +6,9 @@ use std::process::Command;
 use gl_generator::{Api, Fallbacks, GlobalGenerator, Profile, Registry};
 
 fn main() {
-    let mut version = String::from(env!("CARGO_PKG_VERSION"));
+    println!("cargo:rerun-if-env-changed=ALACRITTY_RELEASE_VERSION");
+    let mut version = env::var("ALACRITTY_RELEASE_VERSION")
+        .unwrap_or_else(|_| String::from(env!("CARGO_PKG_VERSION")));
     if let Some(commit_hash) = commit_hash() {
         version = format!("{version} ({commit_hash})");
     }

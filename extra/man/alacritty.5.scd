@@ -957,6 +957,8 @@ _https://docs.rs/winit/latest/winit/keyboard/enum.Key.html#variant.Dead_
 
 		_macOS exclusive:_
 
+		*OpenConfig* (Open or create the main config file in the default text editor)
+
 		*ToggleSimpleFullscreen*
 			Enter fullscreen without occupying another space.
 		*HideOtherApplications*

@@ -321,6 +321,8 @@ impl WindowContext {
         // Change opacity and blur state.
         self.display.window.set_transparent(!opaque);
         self.display.window.set_blur(self.config.window.blur);
+        #[cfg(target_os = "macos")]
+        self.display.window.set_titlebar_color(self.config.colors.primary.background);
 
         // Update hint keys.
         self.display.hint_state.update_alphabet(self.config.hints.alphabet());

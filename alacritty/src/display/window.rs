@@ -23,7 +23,8 @@ use std::fmt::{self, Display, Formatter};
 #[cfg(target_os = "macos")]
 use {
     objc2::MainThreadMarker,
-    objc2_app_kit::{NSColorSpace, NSView},
+    objc2_app_kit::{NSColor, NSColorSpace, NSView, NSWindowButton},
+    std::cell::Cell,
     winit::platform::macos::{OptionAsAlt, WindowAttributesExtMacOS, WindowExtMacOS},
 };
 
@@ -45,6 +46,8 @@ use crate::cli::WindowOptions;
 use crate::config::UiConfig;
 use crate::config::window::{Decorations, Identity, WindowConfig};
 use crate::display::SizeInfo;
+#[cfg(target_os = "macos")]
+use crate::display::color::Rgb;
 
 /// Window icon for `_NET_WM_ICON` property.
 #[cfg(all(feature = "x11", not(any(target_os = "macos", windows))))]
@@ -114,6 +117,9 @@ pub struct Window {
     pub hold: bool,
 
     window: WinitWindow,
+
+    #[cfg(target_os = "macos")]
+    titlebar_color: Cell<Option<(Rgb, usize)>>,
 
     /// Current window title.
     title: String,
@@ -212,6 +218,8 @@ impl Window {
             has_frame: true,
             scale_factor,
             window,
+            #[cfg(target_os = "macos")]
+            titlebar_color: Cell::new(None),
             is_x11,
             ime_inhibitor: Default::default(),
         })
@@ -465,6 +473,47 @@ impl Window {
             PhysicalPosition::new(nspot_x, nspot_y),
             PhysicalSize::new(width, height),
         );
+    }
+
+    /// Match the native title/tab bar to the rendered terminal background.
+    #[cfg(target_os = "macos")]
+    pub fn set_titlebar_color(&self, color: Rgb) {
+        let view = match self.raw_window_handle() {
+            RawWindowHandle::AppKit(handle) => {
+                assert!(MainThreadMarker::new().is_some());
+                // SAFETY: Winit owns this live NSView for the lifetime of self;
+                // AppKit access is restricted to the main thread above.
+                unsafe { handle.ns_view.cast::<NSView>().as_ref() }
+            },
+            _ => return,
+        };
+        if let Some(window) = view.window() {
+            // Tint only the titlebar container, leaving the terminal's transparency intact.
+            // SAFETY: These are live, retained AppKit views accessed on the main thread.
+            let titlebar = unsafe {
+                window
+                    .standardWindowButton(NSWindowButton::CloseButton)
+                    .and_then(|button| button.superview())
+                    .and_then(|titlebar| titlebar.superview())
+            };
+            let Some(titlebar) = titlebar else { return };
+            let key = (color, std::ptr::from_ref(&*titlebar) as usize);
+            if self.titlebar_color.get() == Some(key) {
+                return;
+            }
+            let background = NSColor::colorWithSRGBRed_green_blue_alpha(
+                f64::from(color.r) / 255.,
+                f64::from(color.g) / 255.,
+                f64::from(color.b) / 255.,
+                1.,
+            );
+            window.setTitlebarAppearsTransparent(true);
+            titlebar.setWantsLayer(true);
+            if let Some(layer) = titlebar.layer() {
+                layer.setBackgroundColor(Some(&background.CGColor()));
+                self.titlebar_color.set(Some(key));
+            }
+        }
     }
 
     /// Disable macOS window shadows.
