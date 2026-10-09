@@ -1,7 +1,15 @@
 use log::{debug, warn};
 use winit::raw_window_handle::RawDisplayHandle;
 
+use alacritty_terminal::clipboard::{
+    TerminalClipboardContent, TerminalClipboardLocation, TerminalClipboardReadRequest,
+    TerminalClipboardReadResult, TerminalClipboardWriteRequest, TerminalClipboardWriteResult,
+};
 use alacritty_terminal::term::ClipboardType;
+
+pub mod kitty;
+#[cfg(target_os = "macos")]
+mod macos;
 
 #[cfg(any(feature = "x11", target_os = "macos", windows))]
 use copypasta::ClipboardContext;
@@ -15,6 +23,8 @@ use copypasta::x11_clipboard::{Primary as X11SelectionClipboard, X11ClipboardCon
 pub struct Clipboard {
     clipboard: Box<dyn ClipboardProvider>,
     selection: Option<Box<dyn ClipboardProvider>>,
+    #[cfg(target_os = "macos")]
+    native: Option<macos::MimeClipboard>,
 }
 
 impl Clipboard {
@@ -34,14 +44,24 @@ impl Clipboard {
     /// Used for tests, to handle missing clipboard provider when built without the `x11`
     /// feature, and as default clipboard value.
     pub fn new_nop() -> Self {
-        Self { clipboard: Box::new(NopClipboardContext::new().unwrap()), selection: None }
+        Self {
+            clipboard: Box::new(NopClipboardContext::new().unwrap()),
+            selection: None,
+            #[cfg(target_os = "macos")]
+            native: None,
+        }
     }
 }
 
 impl Default for Clipboard {
     fn default() -> Self {
         #[cfg(any(target_os = "macos", windows))]
-        return Self { clipboard: Box::new(ClipboardContext::new().unwrap()), selection: None };
+        return Self {
+            clipboard: Box::new(ClipboardContext::new().unwrap()),
+            selection: None,
+            #[cfg(target_os = "macos")]
+            native: Some(macos::MimeClipboard::new()),
+        };
 
         #[cfg(all(feature = "x11", not(any(target_os = "macos", windows))))]
         return Self {
@@ -55,6 +75,83 @@ impl Default for Clipboard {
 }
 
 impl Clipboard {
+    pub fn read_protocol(
+        &mut self,
+        request: TerminalClipboardReadRequest,
+    ) -> TerminalClipboardReadResult {
+        #[cfg(target_os = "macos")]
+        if let Some(native) = &self.native {
+            return native.read(request);
+        }
+        let ty = match request.location {
+            TerminalClipboardLocation::Primary if self.selection.is_none() => {
+                return TerminalClipboardReadResult::Unsupported;
+            },
+            TerminalClipboardLocation::Primary => ClipboardType::Selection,
+            TerminalClipboardLocation::Clipboard => ClipboardType::Clipboard,
+        };
+        let mut contents = Vec::new();
+        if request.mime_types.iter().any(|mime| mime == "text/plain") {
+            let data = self.load(ty).into_bytes();
+            if data.len() > alacritty_terminal::clipboard::MAX_WRITE_BYTES {
+                return TerminalClipboardReadResult::Busy;
+            }
+            contents.push(TerminalClipboardContent { mime_type: "text/plain".into(), data });
+        }
+        TerminalClipboardReadResult::Success {
+            available_formats: vec!["text/plain".into()],
+            contents,
+            remember_permission: false,
+        }
+    }
+
+    pub fn write_protocol(
+        &mut self,
+        request: TerminalClipboardWriteRequest,
+    ) -> TerminalClipboardWriteResult {
+        #[cfg(target_os = "macos")]
+        if let Some(native) = &self.native {
+            return native.write(request);
+        }
+        let ty = match request.location {
+            TerminalClipboardLocation::Primary if self.selection.is_none() => {
+                return TerminalClipboardWriteResult::Unsupported;
+            },
+            TerminalClipboardLocation::Primary => ClipboardType::Selection,
+            TerminalClipboardLocation::Clipboard => ClipboardType::Clipboard,
+        };
+        if request.contents.iter().any(|entry| entry.mime_type != "text/plain") {
+            return TerminalClipboardWriteResult::Unsupported;
+        }
+        let data = request.contents.into_iter().next().map_or(Vec::new(), |entry| entry.data);
+        let Ok(text) = String::from_utf8(data) else {
+            return TerminalClipboardWriteResult::InvalidData;
+        };
+        let provider = match (ty, &mut self.selection) {
+            (ClipboardType::Selection, Some(provider)) => provider,
+            _ => &mut self.clipboard,
+        };
+        match provider.set_contents(text) {
+            Ok(()) => TerminalClipboardWriteResult::Success { remember_permission: false },
+            Err(_) => TerminalClipboardWriteResult::IoError,
+        }
+    }
+
+    pub fn protocol_formats(&mut self, location: TerminalClipboardLocation) -> Vec<String> {
+        let request = TerminalClipboardReadRequest {
+            location,
+            mime_types: Vec::new(),
+            list_available: true,
+            name: None,
+            permission_granted: true,
+            can_remember_permission: false,
+        };
+        match self.read_protocol(request) {
+            TerminalClipboardReadResult::Success { available_formats, .. } => available_formats,
+            _ => Vec::new(),
+        }
+    }
+
     pub fn store(&mut self, ty: ClipboardType, text: impl Into<String>) {
         let clipboard = match (ty, &mut self.selection) {
             (ClipboardType::Selection, Some(provider)) => provider,

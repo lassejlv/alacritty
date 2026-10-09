@@ -69,6 +69,7 @@ pub struct WindowContext {
 /// A shell and its terminal/input state. Dropping a pane shuts down only its PTY.
 struct Pane {
     id: PaneId,
+    kitty_clipboard: alacritty_terminal::clipboard::KittyClipboardHostState,
     title: String,
     terminal: Arc<FairMutex<Term<EventProxy>>>,
     cursor_blink_timed_out: bool,
@@ -860,6 +861,7 @@ impl WindowContext {
 
         let context = ActionContext {
             pane_id: self.pane.id,
+            kitty_clipboard: &mut self.pane.kitty_clipboard,
             cursor_blink_timed_out: &mut self.pane.cursor_blink_timed_out,
             prev_bell_cmd: &mut self.pane.prev_bell_cmd,
             message_buffer: &mut self.message_buffer,
@@ -1049,6 +1051,7 @@ impl Pane {
 
         Ok(Self {
             id,
+            kitty_clipboard: Default::default(),
             title: options
                 .window_identity
                 .title

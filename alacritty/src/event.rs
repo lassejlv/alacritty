@@ -804,6 +804,7 @@ impl Default for InlineSearchState {
 
 pub struct ActionContext<'a, N, T> {
     pub pane_id: crate::panes::PaneId,
+    pub kitty_clipboard: &'a mut alacritty_terminal::clipboard::KittyClipboardHostState,
     pub notifier: &'a mut N,
     pub terminal: &'a mut Term<T>,
     pub clipboard: &'a mut Clipboard,
@@ -1539,6 +1540,32 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
         }
     }
 
+    fn paste_clipboard(&mut self, ty: ClipboardType) {
+        let paste_event = self.kitty_clipboard.paste_events_enabled()
+            && !self.search_active()
+            && !self.inline_search_state.char_pending
+            && self.config.terminal.osc52.0 != alacritty_terminal::term::Osc52::Disabled;
+        if paste_event {
+            let location = match ty {
+                ClipboardType::Clipboard => {
+                    alacritty_terminal::clipboard::TerminalClipboardLocation::Clipboard
+                },
+                ClipboardType::Selection => {
+                    alacritty_terminal::clipboard::TerminalClipboardLocation::Primary
+                },
+            };
+            let formats = self.clipboard.protocol_formats(location);
+            if let Some(notification) = self.kitty_clipboard.paste_notification(location, &formats)
+            {
+                self.on_terminal_input_start();
+                self.write_to_pty(notification);
+            }
+            return;
+        }
+        let text = self.clipboard.load(ty);
+        self.paste(&text, true);
+    }
+
     /// Paste a text into the terminal.
     fn paste(&mut self, text: &str, bracketed: bool) {
         if self.search_active() {
@@ -2097,6 +2124,21 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                             self.ctx.clipboard.store(clipboard_type, content);
                         }
                     },
+                    TerminalEvent::KittyClipboard(osc) => {
+                        let mut host = crate::clipboard::kitty::Host {
+                            clipboard: self.ctx.clipboard,
+                            permission: self.ctx.config.terminal.osc52.0,
+                            focused: self.ctx.terminal.is_focused,
+                        };
+                        let replies = self.ctx.kitty_clipboard.handle_osc(osc, &mut host);
+                        for reply in replies {
+                            self.ctx.write_to_pty(reply);
+                        }
+                    },
+                    TerminalEvent::KittyClipboardMode(enabled) => {
+                        self.ctx.kitty_clipboard.set_paste_events_enabled(enabled)
+                    },
+                    TerminalEvent::KittyClipboardReset => self.ctx.kitty_clipboard.reset(),
                     TerminalEvent::ClipboardLoad(clipboard_type, format) => {
                         if self.ctx.terminal.is_focused {
                             let text = format(self.ctx.clipboard.load(clipboard_type).as_str());

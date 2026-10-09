@@ -78,6 +78,7 @@ bitflags! {
         const REPORT_ALTERNATE_KEYS   = 1 << 20;
         const REPORT_ALL_KEYS_AS_ESC  = 1 << 21;
         const REPORT_ASSOCIATED_TEXT  = 1 << 22;
+        const CLIPBOARD_PASTE_EVENTS  = 1 << 23;
         const MOUSE_MODE              = Self::MOUSE_REPORT_CLICK.bits() | Self::MOUSE_MOTION.bits() | Self::MOUSE_DRAG.bits();
         const KITTY_KEYBOARD_PROTOCOL = Self::DISAMBIGUATE_ESC_CODES.bits()
                                       | Self::REPORT_EVENT_TYPES.bits()
@@ -506,6 +507,10 @@ impl<T> Term<T> {
         T: EventListener,
     {
         let old_config = mem::replace(&mut self.config, options);
+        if self.config.osc52 == Osc52::Disabled && old_config.osc52 != Osc52::Disabled {
+            self.mode.remove(TermMode::CLIPBOARD_PASTE_EVENTS);
+            self.event_proxy.send_event(Event::KittyClipboardReset);
+        }
 
         let title_event = match &self.title {
             Some(title) => Event::Title(title.clone()),
@@ -1736,6 +1741,27 @@ impl<T: EventListener> Handler for Term<T> {
         self.colors[index] = None;
     }
 
+    /// Forward Kitty clipboard requests to the pane's UI-thread clipboard host.
+    #[inline]
+    fn clipboard_control(&mut self, params: &[&[u8]], bell: bool, truncated: bool) {
+        let terminator = if bell {
+            crate::clipboard::KittyClipboardOscTerminator::Bell
+        } else {
+            crate::clipboard::KittyClipboardOscTerminator::StringTerminator
+        };
+        let mut body = Vec::new();
+        for (index, param) in params.iter().enumerate() {
+            if index > 0 {
+                body.push(b';');
+            }
+            body.extend_from_slice(param);
+        }
+        self.event_proxy.send_event(Event::KittyClipboard(
+            crate::clipboard::KittyClipboardOsc::from_body(&body, terminator)
+                .with_truncation(truncated),
+        ));
+    }
+
     /// Store data into clipboard.
     #[inline]
     fn clipboard_store(&mut self, clipboard: u8, base64: &[u8]) {
@@ -1879,6 +1905,7 @@ impl<T: EventListener> Handler for Term<T> {
     /// Reset all important fields in the term struct.
     #[inline]
     fn reset_state(&mut self) {
+        self.event_proxy.send_event(Event::KittyClipboardReset);
         self.graphics = Default::default();
         if self.mode.contains(TermMode::ALT_SCREEN) {
             mem::swap(&mut self.grid, &mut self.inactive_grid);
@@ -2015,6 +2042,12 @@ impl<T: EventListener> Handler for Term<T> {
             },
             NamedPrivateMode::ReportFocusInOut => self.mode.insert(TermMode::FOCUS_IN_OUT),
             NamedPrivateMode::BracketedPaste => self.mode.insert(TermMode::BRACKETED_PASTE),
+            NamedPrivateMode::ClipboardPasteEvents => {
+                if self.config.osc52 != Osc52::Disabled {
+                    self.mode.insert(TermMode::CLIPBOARD_PASTE_EVENTS);
+                    self.event_proxy.send_event(Event::KittyClipboardMode(true));
+                }
+            },
             // Mouse encodings are mutually exclusive.
             NamedPrivateMode::SgrMouse => {
                 self.mode.remove(TermMode::UTF8_MOUSE);
@@ -2074,6 +2107,10 @@ impl<T: EventListener> Handler for Term<T> {
             },
             NamedPrivateMode::ReportFocusInOut => self.mode.remove(TermMode::FOCUS_IN_OUT),
             NamedPrivateMode::BracketedPaste => self.mode.remove(TermMode::BRACKETED_PASTE),
+            NamedPrivateMode::ClipboardPasteEvents => {
+                self.mode.remove(TermMode::CLIPBOARD_PASTE_EVENTS);
+                self.event_proxy.send_event(Event::KittyClipboardMode(false));
+            },
             NamedPrivateMode::SgrMouse => self.mode.remove(TermMode::SGR_MOUSE),
             NamedPrivateMode::Utf8Mouse => self.mode.remove(TermMode::UTF8_MOUSE),
             NamedPrivateMode::AlternateScroll => self.mode.remove(TermMode::ALTERNATE_SCROLL),
@@ -2129,6 +2166,13 @@ impl<T: EventListener> Handler for Term<T> {
                     self.mode.contains(TermMode::BRACKETED_PASTE).into()
                 },
                 NamedPrivateMode::SyncUpdate => ModeState::Reset,
+                NamedPrivateMode::ClipboardPasteEvents => {
+                    if self.config.osc52 == Osc52::Disabled {
+                        ModeState::NotSupported
+                    } else {
+                        self.mode.contains(TermMode::CLIPBOARD_PASTE_EVENTS).into()
+                    }
+                },
                 NamedPrivateMode::ColumnMode => ModeState::NotSupported,
             },
             PrivateMode::Unknown(_) => ModeState::NotSupported,

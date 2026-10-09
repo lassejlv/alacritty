@@ -617,6 +617,11 @@ Windows: _"powershell"_
 
 *osc52* = _"Disabled"_ | _"OnlyCopy"_ | _"OnlyPaste"_ | _"CopyPaste"_
 
+	Controls clipboard access with _OSC 52_ and the Kitty _OSC 5522_ protocol.
+	Kitty format discovery is allowed when clipboard access is enabled. Explicit
+	paste actions can grant a single clipboard read when Kitty paste events are
+	enabled. _"Disabled"_ also disables Kitty paste-event mode.
+
 	Controls the ability to write to the system clipboard with the _OSC 52_
 	escape sequence. While this escape sequence is useful to copy contents
 	from the remote server, allowing any application to read from the clipboard

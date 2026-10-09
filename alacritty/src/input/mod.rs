@@ -144,6 +144,11 @@ pub trait ActionContext<T: EventListener> {
     fn semantic_word(&self, point: Point) -> String;
     fn on_terminal_input_start(&mut self) {}
     fn paste(&mut self, _text: &str, _bracketed: bool) {}
+
+    fn paste_clipboard(&mut self, ty: ClipboardType) {
+        let text = self.clipboard_mut().load(ty);
+        self.paste(&text, true);
+    }
     fn spawn_daemon<I, S>(&self, _program: &str, _args: I)
     where
         I: IntoIterator<Item = S> + Debug + Copy,
@@ -331,12 +336,10 @@ impl<T: EventListener> Execute<T> for Action {
             Action::CopySelection => ctx.copy_selection(ClipboardType::Selection),
             Action::ClearSelection => ctx.clear_selection(),
             Action::Paste => {
-                let text = ctx.clipboard_mut().load(ClipboardType::Clipboard);
-                ctx.paste(&text, true);
+                ctx.paste_clipboard(ClipboardType::Clipboard);
             },
             Action::PasteSelection => {
-                let text = ctx.clipboard_mut().load(ClipboardType::Selection);
-                ctx.paste(&text, true);
+                ctx.paste_clipboard(ClipboardType::Selection);
             },
             Action::ToggleFullscreen => ctx.window().toggle_fullscreen(),
             Action::ToggleMaximized => ctx.window().toggle_maximized(),

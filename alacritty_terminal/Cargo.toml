@@ -15,6 +15,7 @@ default = ["serde"]
 serde = ["dep:serde", "bitflags/serde", "vte/serde"]
 
 [dependencies]
+getrandom = "0.3"
 arrayvec = { version = "0.7.2", features = ["serde"] }
 base64 = "0.22.0"
 flate2 = "1.1"

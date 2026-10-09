@@ -690,6 +690,9 @@ pub trait Handler {
     /// Load data from clipboard.
     fn clipboard_load(&mut self, _: u8, _: &str) {}
 
+    /// Kitty OSC 5522 metadata and optional payload, preserving OSC separators.
+    fn clipboard_control(&mut self, _: &[&[u8]], _bell_terminated: bool, _truncated: bool) {}
+
     /// Run the decaln routine.
     fn decaln(&mut self) {}
 
@@ -921,6 +924,7 @@ impl PrivateMode {
             1049 => Self::Named(NamedPrivateMode::SwapScreenAndSetRestoreCursor),
             2004 => Self::Named(NamedPrivateMode::BracketedPaste),
             2026 => Self::Named(NamedPrivateMode::SyncUpdate),
+            5522 => Self::Named(NamedPrivateMode::ClipboardPasteEvents),
             _ => Self::Unknown(mode),
         }
     }
@@ -972,6 +976,8 @@ pub enum NamedPrivateMode {
     BracketedPaste = 2004,
     /// The mode is handled automatically by [`Processor`].
     SyncUpdate = 2026,
+    /// Kitty clipboard MIME paste notifications.
+    ClipboardPasteEvents = 5522,
 }
 
 /// Mode for clearing line.
@@ -1342,6 +1348,12 @@ where
         self.handler.apc_dispatch_owned(data, truncated);
     }
 
+    fn osc_dispatch_oversized(&mut self, params: &[&[u8]], bell_terminated: bool) {
+        if params.first() == Some(&b"5522".as_slice()) {
+            self.handler.clipboard_control(&params[1..], bell_terminated, true);
+        }
+    }
+
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
         let terminator = if bell_terminated { "\x07" } else { "\x1b\\" };
 
@@ -1507,6 +1519,8 @@ where
                     base64 => self.handler.clipboard_store(*clipboard, base64),
                 }
             },
+
+            b"5522" => self.handler.clipboard_control(&params[1..], bell_terminated, false),
 
             // Reset color index.
             b"104" => {
