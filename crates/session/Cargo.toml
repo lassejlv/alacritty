@@ -1,0 +1,36 @@
+[package]
+name = "alacritty_session"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "PTY processes and terminal session I/O for Alacritty"
+
+[dependencies]
+alacritty_terminal = { workspace = true }
+home = "0.5.5"
+libc = "0.2"
+log.workspace = true
+parking_lot.workspace = true
+polling.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix-openpty = "0.2.0"
+rustix = { version = "1.0.0", default-features = false, features = ["std"] }
+signal-hook = "0.4.3"
+
+[target.'cfg(windows)'.dependencies]
+piper = "0.2.1"
+miow = "0.6.0"
+windows-sys = { version = "0.59.0", features = [
+    "Win32_System_Console",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+]}
+
+
+[lints]
+workspace = true

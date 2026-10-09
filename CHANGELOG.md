@@ -6,7 +6,7 @@ The sections should follow the order `Packaging`, `Added`, `Changed`, `Fixed` an
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 Notable changes to the `alacritty_terminal` crate are documented in its
-[CHANGELOG](./alacritty_terminal/CHANGELOG.md).
+[CHANGELOG](./crates/terminal/CHANGELOG.md).
 
 ## 0.18.0-dev
 
@@ -17,12 +17,18 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 
 ### Added
 
+- Independent font zoom and reset for split panes
+
+- Command/Control-Delete and Backspace shortcuts for clearing the current shell input line
+
 - Command-A selects the active pane's full buffer on macOS
 - Native macOS terminal context menu with clipboard, selection, search, and pane commands
 
 - OSC 7501 program status, shown in dynamic window and tab titles
 
 ### Changed
+
+- Organize the Cargo workspace under `crates/`, with separate session and renderer libraries
 
 - Minimum Rust version has been bumped to 1.99.0
 
@@ -248,7 +254,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 ### Packaging
 
 - Minimum Rust version has been bumped to 1.70.0
-- Manpages are now generated using `scdoc` (see `INSTALL.md`)
+- Manpages are now generated using `scdoc` (see `docs/installation.md`)
 
 ### Added
 
@@ -513,7 +519,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 ### Added
 
 - Option `colors.transparent_background_colors` to allow applying opacity to all background colors
-- Support for running multiple windows from a single Alacritty instance (see docs/features.md)
+- Support for running multiple windows from a single Alacritty instance (see docs/features/README.md)
 - Urgency support on Wayland via `xdg_activation_v1`
 
 ### Changed
@@ -590,7 +596,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 
 - IME composition preview not appearing on Windows
 - Synchronized terminal updates using `DCS = 1 s ST`/`DCS = 2 s ST`
-- Regex terminal hints ([see features.md](./docs/features.md#hints))
+- Regex terminal hints ([see features.md](./docs/features/README.md#hints))
 - macOS keybinding (cmd+alt+H) hiding all windows other than Alacritty
 - Support for `magnet` URLs
 
@@ -1076,7 +1082,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 
 ### Packaging
 
-- Add appstream metadata, located at /extra/linux/io.alacritty.Alacritty.xml
+- Add appstream metadata, located at /packaging/linux/io.alacritty.Alacritty.xml
 - The xclip dependency has been removed
 - On macOS, Alacritty now requests NSSystemAdministrationUsageDescription to
    avoid permission failures
@@ -1164,7 +1170,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 ### Packaging
 
 - On Linux, the .desktop file now uses `Alacritty` as icon name, which can be
-    found at `extra/logo/alacritty-term.svg`
+    found at `assets/icons/alacritty-term.svg`
 
 ### Added
 

@@ -37,7 +37,7 @@ jobs:
           rustup show
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Test native architecture
-        run: cargo test --locked --release --target=aarch64-apple-darwin
+        run: cargo test --locked --workspace --release --target=aarch64-apple-darwin
       - name: Build universal app
         run: make app-universal
       - name: Import Apple credentials

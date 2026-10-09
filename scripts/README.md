@@ -8,7 +8,7 @@ Alacritty process exits, a flamegraph will be generated and it's URI printed
 as the only output to STDOUT.
 
 ```sh
-./create-flamegraph.sh
+scripts/diagnostics/create-flamegraph.sh
 ```
 
 Running this script depends on an installation of `perf`.
@@ -20,7 +20,10 @@ first shows various foreground and background variants. The second enumerates
 all the colors of a standard terminal. The third enumerates the 24-bit colors.
 
 ```sh
-./fg-bg.sh
-./colors.sh
-./24-bit-colors.sh
+scripts/diagnostics/fg-bg.sh
+scripts/diagnostics/colors.sh
+scripts/diagnostics/24-bit-color.sh
 ```
+
+Run these commands from the repository root. Protocol smoke checks live in
+`scripts/smoke/`; packaging and signing scripts live in `scripts/release/`.

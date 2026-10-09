@@ -55,7 +55,7 @@ To make sure no regressions were introduced, all tests should be run before send
 The following command can be run to test Alacritty:
 
 ```
-cargo test
+cargo test --locked --workspace
 ```
 
 Additionally if there's any functionality included which would lend itself to additional testing,
@@ -65,8 +65,8 @@ annotation, or Alacritty's ref tests.
 To record a new ref test, a release version of the patched binary should be created and run with the
 `--ref-test` flag. After closing the Alacritty window, or killing it (`exit` and `^D` do not work),
 some new files should have been generated in the working directory. Those can then be copied to the
-`./tests/ref/NEW_TEST_NAME` directory and the test can be enabled by editing the `ref_tests!` macro
-in the `./tests/ref.rs` file. When fixing a bug, it should be checked that the ref test does not
+`crates/terminal/tests/fixtures/NEW_TEST_NAME` directory and the test can be enabled by editing the `ref_tests!` macro
+in the `crates/terminal/tests/reference.rs` file. When fixing a bug, it should be checked that the ref test does not
 complete correctly with the unpatched version, to make sure the test case is covered properly.
 
 ### Performance
@@ -92,7 +92,7 @@ If any change has been made to the `config.rs` file, it should also be documente
 Changes compared to the latest Alacritty release which have a direct effect on the user (opposed to
 things like code refactorings or documentation/tests) additionally need to be documented in the
 `CHANGELOG.md`. When a notable change is made to `alacritty_terminal`, it should be documented in
-`alacritty_terminal/CHANGELOG.md` as well. The existing entries should be used as a style guideline.
+`crates/terminal/CHANGELOG.md` as well. The existing entries should be used as a style guideline.
 The change log should be used to document changes from a user-perspective, instead of explaining the
 technical background (like commit messages) More information about Alacritty's change log format can
 be found [here](https://keepachangelog.com).

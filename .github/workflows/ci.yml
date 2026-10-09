@@ -25,7 +25,7 @@ jobs:
         run: cargo test --locked -p alacritty_terminal --no-default-features
       - name: Clippy
         run: |
-          cargo clippy --all-targets --all-features --locked -- -D warnings
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
   check-macos-x86_64:
     runs-on: macos-latest
     steps:

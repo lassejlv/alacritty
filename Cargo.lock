@@ -37,6 +37,8 @@ dependencies = [
  "ahash",
  "alacritty_config",
  "alacritty_config_derive",
+ "alacritty_renderer",
+ "alacritty_session",
  "alacritty_terminal",
  "base64",
  "bitflags 2.9.4",
@@ -47,7 +49,6 @@ dependencies = [
  "dirs",
  "dispatch2",
  "embed-resource",
- "gl_generator",
  "glutin",
  "home",
  "libc",
@@ -98,6 +99,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "alacritty_renderer"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "alacritty_config",
+ "alacritty_config_derive",
+ "alacritty_terminal",
+ "bitflags 2.9.4",
+ "crossfont",
+ "gl_generator",
+ "glutin",
+ "log",
+ "serde",
+ "toml",
+ "unicode-width",
+ "winit",
+]
+
+[[package]]
+name = "alacritty_session"
+version = "0.1.0"
+dependencies = [
+ "alacritty_terminal",
+ "home",
+ "libc",
+ "log",
+ "miow",
+ "parking_lot",
+ "piper",
+ "polling",
+ "rustix 1.1.2",
+ "rustix-openpty",
+ "signal-hook",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "alacritty_terminal"
 version = "0.26.1-dev"
 dependencies = [
@@ -106,24 +144,15 @@ dependencies = [
  "bitflags 2.9.4",
  "flate2",
  "getrandom 0.3.3",
- "home",
  "libc",
  "log",
- "miow",
- "parking_lot",
- "piper",
  "png 0.18.1",
- "polling",
  "regex-automata",
- "rustix 1.1.2",
- "rustix-openpty",
  "serde",
  "serde_json",
- "signal-hook",
  "tempfile",
  "unicode-width",
  "vte",
- "windows-sys 0.59.0",
 ]
 
 [[package]]

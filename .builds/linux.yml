@@ -11,7 +11,7 @@ packages:
   - scdoc
 
 sources:
-  - https://github.com/alacritty/alacritty
+  - https://github.com/lassejlv/alacritty
 
 environment:
   PATH: /home/build/.cargo/bin:/usr/bin/
@@ -25,20 +25,20 @@ tasks:
       cargo +nightly fmt -- --check
   - man-pages: |
       cd alacritty
-      cat extra/man/alacritty.1.scd | scdoc > /dev/null
-      cat extra/man/alacritty-msg.1.scd | scdoc > /dev/null
-      cat extra/man/alacritty.5.scd | scdoc > /dev/null
-      cat extra/man/alacritty-bindings.5.scd | scdoc > /dev/null
+      cat docs/man/alacritty.1.scd | scdoc > /dev/null
+      cat docs/man/alacritty-msg.1.scd | scdoc > /dev/null
+      cat docs/man/alacritty.5.scd | scdoc > /dev/null
+      cat docs/man/alacritty-bindings.5.scd | scdoc > /dev/null
   - test: |
       cd alacritty
-      cargo test
+      cargo test --locked --workspace
   - clippy: |
       cd alacritty
       rustup component add clippy
-      cargo clippy --all-targets
+      cargo clippy --workspace --all-targets
   - feature-wayland: |
-      cd alacritty/alacritty
+      cd alacritty/crates/alacritty
       RUSTFLAGS="-D warnings" cargo test --no-default-features --features=wayland
   - feature-x11: |
-      cd alacritty/alacritty
+      cd alacritty/crates/alacritty
       RUSTFLAGS="-D warnings" cargo test --no-default-features --features=x11

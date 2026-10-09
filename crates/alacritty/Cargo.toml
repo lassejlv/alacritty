@@ -1,0 +1,136 @@
+[package]
+name = "alacritty"
+version = "0.18.0-dev"
+authors = ["Christian Duerr <contact@christianduerr.com>", "Joe Wilm <joe@jwilm.com>"]
+license = "Apache-2.0"
+description = "A fast, cross-platform, OpenGL terminal emulator"
+readme = "README.md"
+homepage = "https://alacritty.org"
+repository = "https://github.com/alacritty/alacritty"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies.alacritty_terminal]
+workspace = true
+features = ["serde"]
+
+[dependencies.alacritty_config_derive]
+workspace = true
+
+[dependencies.alacritty_config]
+workspace = true
+
+[dependencies]
+alacritty_renderer = { workspace = true }
+alacritty_session = { workspace = true }
+ahash = { version = "0.8.6", features = ["no-rng"] }
+bitflags.workspace = true
+clap = { version = "4.2.7", features = ["derive", "env"] }
+copypasta = { version = "0.10.1", default-features = false }
+crossfont.workspace = true
+glutin = { version = "0.32.2", default-features = false, features = ["egl", "wgl"] }
+home = "0.5.5"
+libc = "0.2"
+log = { workspace = true, features = ["std", "serde"] }
+notify = "8.0.0"
+parking_lot.workspace = true
+polling.workspace = true
+serde_json = "1"
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = "0.9.25"
+signal-hook = { version = "0.4.3", default-features = false }
+tempfile = "3.12.0"
+toml.workspace = true
+toml_edit.workspace = true
+unicode-width.workspace = true
+winit = { version = "0.30.9", default-features = false, features = ["rwh_06", "serde"] }
+
+[dev-dependencies]
+base64 = "0.22"
+clap_complete = "4.2.3"
+
+[target.'cfg(not(windows))'.dependencies]
+xdg = "3.0.0"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+png = { version = "0.17.5", default-features = false, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+dispatch2 = { version = "0.3.0", default-features = false, features = ["std"] }
+objc2 = "0.6.1"
+objc2-uniform-type-identifiers = { version = "0.3.2", default-features = false, features = ["std", "UTType"] }
+objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["CALayer", "objc2-core-graphics"] }
+objc2-foundation = { version = "0.3.1", default-features = false, features = [
+    "std",
+    "NSString",
+    "NSData",
+    "NSArray",
+    "NSLocale",
+    "NSUserDefaults",
+    "NSBundle",
+    "NSError",
+    "NSURL",
+] }
+objc2-app-kit = { version = "0.3.1", default-features = false, features = [
+    "std",
+    "NSApplication",
+    "NSPasteboard",
+    "NSPasteboardItem",
+    "NSMenu",
+    "NSMenuItem",
+    "NSGraphics",
+    "NSEvent",
+    "NSPanel",
+    "NSOpenPanel",
+    "NSSavePanel",
+    "NSAlert",
+    "NSAppearance",
+    "NSScrollView",
+    "NSTextView",
+    "NSText",
+    "NSWorkspace",
+    "NSButton",
+    "NSControl",
+    "NSColor",
+    "NSColorSpace",
+    "NSResponder",
+    "NSView",
+    "NSWindow",
+    "objc2-core-graphics",
+    "objc2-quartz-core",
+] }
+
+[target.'cfg(windows)'.dependencies]
+dirs = "6.0.0"
+windows-sys = { version = "0.59", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Threading",
+    "Win32_System_Console",
+    "Win32_Foundation",
+]}
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3.0.2"
+
+[features]
+default = ["wayland", "x11"]
+x11 = [
+    "alacritty_renderer/x11",
+    "copypasta/x11",
+    "winit/x11",
+    "glutin/x11",
+    "glutin/glx",
+    "png",
+]
+wayland = [
+    "alacritty_renderer/wayland",
+    "copypasta/wayland",
+    "glutin/wayland",
+    "winit/wayland",
+    "winit/wayland-dlopen",
+    "winit/wayland-csd-adwaita-crossfont",
+]
+nightly = []
+
+[lints]
+workspace = true

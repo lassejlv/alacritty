@@ -1,0 +1,32 @@
+[package]
+name = "alacritty_renderer"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "OpenGL text and image rendering for Alacritty"
+
+[dependencies]
+alacritty_terminal = { workspace = true, features = ["serde"] }
+alacritty_config = { workspace = true }
+alacritty_config_derive = { workspace = true }
+ahash = { version = "0.8.6", features = ["no-rng"] }
+bitflags.workspace = true
+crossfont.workspace = true
+glutin = { version = "0.32.2", default-features = false, features = ["egl", "wgl"] }
+log.workspace = true
+serde = { workspace = true, features = ["derive"] }
+toml.workspace = true
+unicode-width.workspace = true
+winit = { version = "0.30.9", default-features = false, features = ["rwh_06"] }
+
+[build-dependencies]
+gl_generator = "0.14.0"
+
+[features]
+default = ["wayland", "x11"]
+x11 = ["winit/x11", "glutin/x11", "glutin/glx"]
+wayland = ["winit/wayland", "winit/wayland-dlopen", "glutin/wayland"]
+
+[lints]
+workspace = true

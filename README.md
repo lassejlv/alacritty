@@ -1,12 +1,12 @@
 <p align="center">
-    <img width="200" alt="Alacritty Logo" src="https://raw.githubusercontent.com/alacritty/alacritty/master/extra/logo/compat/alacritty-term%2Bscanlines.png">
+    <img width="200" alt="Alacritty Logo" src="assets/icons/compat/alacritty-term%2Bscanlines.png">
 </p>
 
 <h1 align="center">Alacritty - A fast, cross-platform, OpenGL terminal emulator</h1>
 
 <p align="center">
   <img alt="Alacritty - A fast, cross-platform, OpenGL terminal emulator"
-       src="https://raw.githubusercontent.com/alacritty/alacritty/master/extra/promo/alacritty-readme.png">
+       src="assets/screenshots/alacritty-readme.png">
 </p>
 
 ## About
@@ -14,7 +14,7 @@
 Alacritty is a modern terminal emulator that comes with sensible defaults, but
 allows for extensive [configuration](#configuration). By integrating with other
 applications, rather than reimplementing their functionality, it manages to
-provide a flexible set of [features](./docs/features.md) with high performance.
+provide a flexible set of [features](./docs/features/README.md) with high performance.
 The supported platforms currently consist of BSD, Linux, macOS and Windows.
 
 The software is considered to be at a **beta** level of readiness; there are
@@ -29,7 +29,7 @@ Join [`#alacritty`] on libera.chat if you have questions or looking for a quick 
 
 ## Features
 
-You can find an overview over the features available in Alacritty [here](./docs/features.md).
+You can find an overview over the features available in Alacritty [here](./docs/features/README.md).
 
 ## Further information
 
@@ -46,7 +46,7 @@ Prebuilt binaries for macOS and Windows can also be downloaded from the
 [GitHub releases page](https://github.com/alacritty/alacritty/releases).
 
 For everyone else, the detailed instructions to install Alacritty can be found
-[here](INSTALL.md).
+[here](docs/installation.md).
 
 ### Requirements
 
@@ -112,3 +112,8 @@ niceties like a GUI config editor.
 Alacritty is released under the [Apache License, Version 2.0].
 
 [Apache License, Version 2.0]: https://github.com/alacritty/alacritty/blob/master/LICENSE-APACHE
+
+## Development
+
+See the [workspace architecture](docs/architecture.md) and
+[development guide](docs/development.md) for crate ownership and local checks.

@@ -1,20 +1,20 @@
 TARGET = alacritty
 
-ASSETS_DIR = extra
+PACKAGING_DIR = packaging
 RELEASE_DIR = target/release
-MANPAGE = $(ASSETS_DIR)/man/alacritty.1.scd
-MANPAGE-MSG = $(ASSETS_DIR)/man/alacritty-msg.1.scd
-MANPAGE-CONFIG = $(ASSETS_DIR)/man/alacritty.5.scd
-MANPAGE-CONFIG-BINDINGS = $(ASSETS_DIR)/man/alacritty-bindings.5.scd
-MANPAGE-ESCAPES = $(ASSETS_DIR)/man/alacritty-escapes.7.scd
-TERMINFO = $(ASSETS_DIR)/alacritty.info
-COMPLETIONS_DIR = $(ASSETS_DIR)/completions
+MANPAGE = docs/man/alacritty.1.scd
+MANPAGE-MSG = docs/man/alacritty-msg.1.scd
+MANPAGE-CONFIG = docs/man/alacritty.5.scd
+MANPAGE-CONFIG-BINDINGS = docs/man/alacritty-bindings.5.scd
+MANPAGE-ESCAPES = docs/man/alacritty-escapes.7.scd
+TERMINFO = $(PACKAGING_DIR)/terminfo/alacritty.info
+COMPLETIONS_DIR = $(PACKAGING_DIR)/completions
 COMPLETIONS = $(COMPLETIONS_DIR)/_alacritty \
 	$(COMPLETIONS_DIR)/alacritty.bash \
 	$(COMPLETIONS_DIR)/alacritty.fish
 
 APP_NAME = Alacritty.app
-APP_TEMPLATE = $(ASSETS_DIR)/osx/$(APP_NAME)
+APP_TEMPLATE = $(PACKAGING_DIR)/macos/$(APP_NAME)
 APP_DIR = $(RELEASE_DIR)/osx
 APP_BINARY = $(RELEASE_DIR)/$(TARGET)
 APP_BINARY_DIR = $(APP_DIR)/$(APP_NAME)/Contents/MacOS
@@ -58,8 +58,8 @@ $(APP_NAME)-%: $(TARGET)-%
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
 	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
 	@cp -fp $(COMPLETIONS) $(APP_COMPLETIONS_DIR)
-	@cp -fp alacritty_terminal/src/graphics/LICENSE-MIT $(APP_EXTRAS_DIR)/Kitty-Graphics-LICENSE.txt
-	@cp -fp alacritty_terminal/src/clipboard/LICENSE-MIT $(APP_EXTRAS_DIR)/Kitty-Clipboard-LICENSE.txt
+	@cp -fp crates/terminal/src/graphics/LICENSE-MIT $(APP_EXTRAS_DIR)/Kitty-Graphics-LICENSE.txt
+	@cp -fp crates/terminal/src/protocols/clipboard/LICENSE-MIT $(APP_EXTRAS_DIR)/Kitty-Clipboard-LICENSE.txt
 	@bash scripts/release/embed-sparkle.sh "$(APP_DIR)/$(APP_NAME)"
 	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
 	@codesign --remove-signature "$(APP_DIR)/$(APP_NAME)"

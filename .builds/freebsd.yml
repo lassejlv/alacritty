@@ -11,7 +11,7 @@ packages:
   - x11/libxkbcommon
 
 sources:
-  - https://github.com/alacritty/alacritty
+  - https://github.com/lassejlv/alacritty
 
 environment:
   PATH: /home/build/.cargo/bin:/bin:/usr/bin:/usr/local/bin
@@ -21,14 +21,14 @@ tasks:
       curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable --profile minimal
   - test: |
       cd alacritty
-      cargo test
+      cargo test --locked --workspace
   - clippy: |
       cd alacritty
       rustup component add clippy
-      cargo clippy --all-targets
+      cargo clippy --workspace --all-targets
   - feature-wayland: |
-      cd alacritty/alacritty
+      cd alacritty/crates/alacritty
       RUSTFLAGS="-D warnings" cargo test --no-default-features --features=wayland
   - feature-x11: |
-      cd alacritty/alacritty
+      cd alacritty/crates/alacritty
       RUSTFLAGS="-D warnings" cargo test --no-default-features --features=x11
