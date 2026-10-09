@@ -817,13 +817,29 @@ impl WindowContext {
                 self.dirty = true;
             }
             let terminal = self.pane.terminal.lock();
-            self.display.draw(
+            let next_animation = self.display.draw(
                 terminal,
                 &self.message_buffer,
                 &self.config,
                 &mut self.pane.search_state,
                 id == active,
             );
+            let timer = crate::scheduler::TimerId::for_pane(
+                crate::scheduler::Topic::GraphicsAnimation,
+                self.id(),
+                id,
+            );
+            scheduler.unschedule(timer);
+            if let Some(deadline) = next_animation {
+                let event =
+                    Event::new(crate::event::EventType::GraphicsAnimation, self.id()).with_pane(id);
+                scheduler.schedule(
+                    event,
+                    deadline.saturating_duration_since(Instant::now()),
+                    false,
+                    timer,
+                );
+            }
         }
         self.load_pane(active);
         self.display.present(scheduler);
@@ -989,7 +1005,8 @@ impl Pane {
         // This object contains all of the state about what's being displayed. It's
         // wrapped in a clonable mutex since both the I/O loop and display need to
         // access it.
-        let terminal = Term::new(config.term_options(), &size_info, event_proxy.clone());
+        let mut terminal = Term::new(config.term_options(), &size_info, event_proxy.clone());
+        terminal.set_graphics_cell_size(size_info.cell_width(), size_info.cell_height());
         let terminal = Arc::new(FairMutex::new(terminal));
 
         // Create the PTY.

@@ -23,6 +23,7 @@ use crate::gl;
 use crate::renderer::rects::{RectRenderer, RenderRect};
 use crate::renderer::shader::ShaderError;
 
+mod graphics;
 pub mod platform;
 pub mod rects;
 mod shader;
@@ -87,6 +88,7 @@ enum TextRendererProvider {
 
 #[derive(Debug)]
 pub struct Renderer {
+    graphics: graphics::GraphicsRenderer,
     origin: (i32, i32),
     text_renderer: TextRendererProvider,
     rect_renderer: RectRenderer,
@@ -172,7 +174,12 @@ impl Renderer {
             }
         }
 
-        Ok(Self { text_renderer, rect_renderer, robustness, origin: (0, 0) })
+        let graphics = graphics::GraphicsRenderer::new(if use_glsl3 {
+            ShaderVersion::Glsl3
+        } else {
+            ShaderVersion::Gles2
+        })?;
+        Ok(Self { text_renderer, rect_renderer, graphics, robustness, origin: (0, 0) })
     }
 
     pub fn draw_cells<I: Iterator<Item = RenderableCell>>(
@@ -189,6 +196,23 @@ impl Renderer {
                 renderer.draw_cells(size_info, glyph_cache, cells)
             },
         }
+    }
+
+    pub fn prune_images(&mut self) {
+        self.graphics.prune();
+    }
+
+    pub fn draw_images<'a>(
+        &mut self,
+        size: &SizeInfo,
+        placements: impl Iterator<Item = &'a alacritty_terminal::graphics::KittyGraphicsRenderPlacement>,
+    ) {
+        // SAFETY: Display has made our context current; use pane-relative physical pixels.
+        unsafe {
+            gl::Viewport(self.origin.0, self.origin.1, size.width() as i32, size.height() as i32);
+        }
+        self.graphics.draw(size, placements);
+        self.set_viewport(size);
     }
 
     /// Draw a string in a variable location. Used for printing the render timer, warnings and

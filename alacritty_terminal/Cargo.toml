@@ -17,6 +17,8 @@ serde = ["dep:serde", "bitflags/serde", "vte/serde"]
 [dependencies]
 arrayvec = { version = "0.7.2", features = ["serde"] }
 base64 = "0.22.0"
+flate2 = "1.1"
+png = "0.18"
 bitflags = "2.4.1"
 home = "0.5.5"
 libc = "0.2"
@@ -46,4 +48,5 @@ windows-sys = { version = "0.59.0", features = [
 ]}
 
 [dev-dependencies]
+tempfile = "3.23"
 serde_json = "1.0.0"

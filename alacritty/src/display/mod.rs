@@ -808,6 +808,7 @@ impl Display {
             // Clear focused search match.
             search_state.clear_focused_match();
         }
+        terminal.set_graphics_cell_size(cell_width, cell_height);
         self.size_info = new_size;
     }
 
@@ -854,7 +855,9 @@ impl Display {
         config: &UiConfig,
         search_state: &mut SearchState,
         focused: bool,
-    ) {
+    ) -> Option<Instant> {
+        let images = terminal.graphics_placements();
+        let next_animation = images.iter().filter_map(|image| image.animation_deadline).min();
         // Collect renderable content before the terminal is dropped.
         let mut content = RenderableContent::new(config, self, &terminal, search_state);
         let mut grid_cells = Vec::new();
@@ -916,6 +919,33 @@ impl Display {
         }
         self.renderer.resize(&size_info);
         self.renderer.clear(background_color, config.window_opacity());
+        if !images.is_empty() {
+            self.renderer
+                .draw_images(&size_info, images.iter().filter(|p| p.z_index < i32::MIN / 2));
+            let backgrounds = grid_cells
+                .iter()
+                .filter(|cell| cell.bg_alpha > 0.)
+                .map(|cell| {
+                    let width = if cell.flags.contains(Flags::WIDE_CHAR) { 2. } else { 1. };
+                    RenderRect::new(
+                        size_info.padding_x() + cell.point.column.0 as f32 * size_info.cell_width(),
+                        size_info.padding_y() + cell.point.line as f32 * size_info.cell_height(),
+                        width * size_info.cell_width(),
+                        size_info.cell_height(),
+                        cell.bg,
+                        cell.bg_alpha,
+                    )
+                })
+                .collect();
+            self.renderer.draw_rects(&size_info, &metrics, backgrounds);
+            self.renderer.draw_images(
+                &size_info,
+                images.iter().filter(|p| p.z_index >= i32::MIN / 2 && p.z_index < 0),
+            );
+            for cell in &mut grid_cells {
+                cell.bg_alpha = 0.;
+            }
+        }
         let mut lines = RenderLines::new();
 
         // Optimize loop hint comparator.
@@ -1088,6 +1118,9 @@ impl Display {
             self.renderer.draw_rects(&size_info, &metrics, rects);
         }
 
+        if !images.is_empty() {
+            self.renderer.draw_images(&size_info, images.iter().filter(|p| p.z_index >= 0));
+        }
         self.draw_render_timer(config);
 
         // Draw hyperlink uri preview.
@@ -1116,12 +1149,14 @@ impl Display {
                 RenderRect::new(w - thickness, 0., thickness, h, color, 1.),
             ]);
         }
+        next_animation
     }
 
     /// Begin one complete frame; pane clears are clipped to their own rectangles.
     pub fn begin_panes(&mut self, config: &UiConfig) {
         self.make_current();
         self.renderer.set_pane(None);
+        self.renderer.prune_images();
         let bg = config.colors.primary.background;
         let fg = config.colors.primary.foreground;
         let mix = |a: u8, b: u8| ((u16::from(a) * 4 + u16::from(b)) / 5) as u8;

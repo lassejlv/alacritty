@@ -79,3 +79,9 @@ from theme files.
 If Ghostty loads multiple independent root configs, select the desired root
 file explicitly; its includes are imported with it. Ghostty files are left
 unchanged.
+
+## Inline images
+
+Kitty graphics clients can display images and animations inside any tab or split
+pane. See [Kitty graphics support](kitty-graphics.md) for supported operations and
+a self-contained visual test.
