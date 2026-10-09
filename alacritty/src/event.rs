@@ -100,6 +100,8 @@ pub struct Processor {
     config: Rc<UiConfig>,
     #[cfg(target_os = "macos")]
     updater: Option<crate::macos::updater::Updater>,
+    #[cfg(target_os = "macos")]
+    menus: Option<crate::macos::menus::Menus>,
 }
 
 impl Processor {
@@ -145,6 +147,8 @@ impl Processor {
             config_monitor,
             #[cfg(target_os = "macos")]
             updater: None,
+            #[cfg(target_os = "macos")]
+            menus: None,
         }
     }
 
@@ -169,7 +173,11 @@ impl Processor {
 
         #[cfg(target_os = "macos")]
         {
-            self.updater = crate::macos::updater::Updater::new();
+            if self.menus.is_none() {
+                self.menus = crate::macos::menus::Menus::new(self.proxy.clone());
+                self.updater = crate::macos::updater::Updater::new();
+            }
+            self.refresh_menu_windows();
         }
 
         Ok(())
@@ -180,7 +188,10 @@ impl Processor {
         &mut self,
         event_loop: &ActiveEventLoop,
         options: WindowOptions,
+        #[cfg(target_os = "macos")] parent_id: Option<WindowId>,
     ) -> Result<(), Box<dyn Error>> {
+        #[cfg(target_os = "macos")]
+        let tabbing_id = options.window_tabbing_id.clone();
         let gl_config = self.gl_config.as_ref().unwrap();
 
         // Override config with CLI/IPC options.
@@ -199,8 +210,48 @@ impl Processor {
             config_overrides,
         )?;
 
+        #[cfg(target_os = "macos")]
+        if let Some(tabbing_id) = tabbing_id {
+            let parent = parent_id.and_then(|id| self.windows.get(&id)).or_else(|| {
+                self.windows
+                    .values()
+                    .find(|window| window.display.window.tabbing_id() == tabbing_id)
+            });
+            if let Some(parent) = parent {
+                window_context.display.window.join_tab_group(&parent.display.window);
+            }
+        }
         self.windows.insert(window_context.id(), window_context);
+        #[cfg(target_os = "macos")]
+        self.refresh_menu_windows();
         Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn refresh_menu_windows(&self) {
+        if let Some(menus) = &self.menus {
+            let config = self
+                .windows
+                .values()
+                .find(|window| window.display.window.has_focus())
+                .map(|window| window.config())
+                .unwrap_or(&self.config);
+            menus.configure_shortcuts(config);
+            menus.set_windows(
+                self.windows
+                    .values()
+                    .filter_map(|window| {
+                        window.display.window.native_window_number().map(|number| {
+                            (
+                                number,
+                                window.config().window.decorations
+                                    != crate::config::window::Decorations::None,
+                            )
+                        })
+                    })
+                    .collect(),
+            );
+        }
     }
 
     /// Run the event loop.
@@ -263,6 +314,13 @@ impl ApplicationHandler<Event> for Processor {
     ) {
         if self.config.debug.print_events {
             info!(target: LOG_TARGET_WINIT, "{event:?}");
+        }
+
+        #[cfg(target_os = "macos")]
+        if matches!(event, WindowEvent::Focused(true)) {
+            if let (Some(menus), Some(window)) = (&self.menus, self.windows.get(&window_id)) {
+                menus.configure_shortcuts(window.config());
+            }
         }
 
         // Ignore all events we do not care about.
@@ -381,10 +439,47 @@ impl ApplicationHandler<Event> for Processor {
                     for window_context in self.windows.values_mut() {
                         window_context.update_config(self.config.clone());
                     }
+                    #[cfg(target_os = "macos")]
+                    self.refresh_menu_windows();
+                }
+            },
+            #[cfg(target_os = "macos")]
+            (EventType::MacosMenu(command, number), _) => {
+                use crate::macos::menus::Command;
+                let window_id = self.windows.iter().find_map(|(id, window)| {
+                    (window.display.window.native_window_number() == number).then_some(*id)
+                });
+                match command {
+                    command if command.action().is_some() && window_id.is_some() => {
+                        let _ = self
+                            .proxy
+                            .send_event(Event::new(EventType::MacosAction(command), window_id));
+                    },
+                    Command::CreateNewWindow => {
+                        let _ = self.proxy.send_event(Event::new(
+                            EventType::CreateWindow(WindowOptions::default()),
+                            None,
+                        ));
+                    },
+                    Command::OpenConfig => {
+                        crate::macos::config_ui::open_config(&self.config, &self.proxy);
+                    },
+                    Command::ReloadConfig => {
+                        if let Some(path) = self.config.config_paths.first() {
+                            let _ = self.proxy.send_event(Event::new(
+                                EventType::ConfigReload(path.clone()),
+                                None,
+                            ));
+                        }
+                    },
+                    Command::MigrateGhostty => {
+                        crate::macos::config_ui::migrate_ghostty(&self.config, &self.proxy);
+                    },
+                    _ => (),
                 }
             },
             // Create a new terminal window.
-            (EventType::CreateWindow(options), _) => {
+            (EventType::CreateWindow(options), _parent_id) => {
                 // XXX Ensure that no context is current when creating a new window,
                 // otherwise it may lock the backing buffer of the
                 // surface of current context when asking
@@ -399,7 +494,12 @@ impl ApplicationHandler<Event> for Processor {
                         self.initial_window_error = Some(err);
                         event_loop.exit();
                     }
-                } else if let Err(err) = self.create_window(event_loop, options) {
+                } else if let Err(err) = self.create_window(
+                    event_loop,
+                    options,
+                    #[cfg(target_os = "macos")]
+                    _parent_id.copied(),
+                ) {
                     error!("Could not open window: {err:?}");
                 }
             },
@@ -439,6 +539,9 @@ impl ApplicationHandler<Event> for Processor {
                     },
                     _ => return,
                 };
+
+                #[cfg(target_os = "macos")]
+                self.refresh_menu_windows();
 
                 // Unschedule pending events.
                 self.scheduler.unschedule_window(window_context.id());
@@ -557,6 +660,10 @@ impl From<Event> for WinitEvent<Event> {
 pub enum EventType {
     Terminal(TerminalEvent),
     ConfigReload(PathBuf),
+    #[cfg(target_os = "macos")]
+    MacosMenu(crate::macos::menus::Command, Option<isize>),
+    #[cfg(target_os = "macos")]
+    MacosAction(crate::macos::menus::Command),
     Message(Message),
     Scroll(Scroll),
     CreateWindow(WindowOptions),
@@ -906,7 +1013,12 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
             options.window_tabbing_id = tabbing_id;
         }
 
-        let _ = self.event_proxy.send_event(Event::new(EventType::CreateWindow(options), None));
+        #[cfg(target_os = "macos")]
+        let parent_id = options.window_tabbing_id.as_ref().map(|_| self.display.window.id());
+        #[cfg(not(target_os = "macos"))]
+        let parent_id = None;
+        let _ =
+            self.event_proxy.send_event(Event::new(EventType::CreateWindow(options), parent_id));
     }
 
     #[cfg(windows)]
@@ -1868,6 +1980,16 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
     pub fn handle_event(&mut self, event: WinitEvent<Event>) {
         match event {
             WinitEvent::UserEvent(Event { payload, .. }) => match payload {
+                #[cfg(target_os = "macos")]
+                EventType::MacosAction(command) => {
+                    use crate::input::Execute;
+                    if let Some(action) = command.action() {
+                        action.execute(&mut self.ctx);
+                    }
+                    self.ctx.mark_dirty();
+                },
+                #[cfg(target_os = "macos")]
+                EventType::MacosMenu(..) => (),
                 EventType::SearchNext => self.ctx.goto_match(None),
                 EventType::Scroll(scroll) => self.ctx.scroll(scroll),
                 EventType::BlinkCursor => {

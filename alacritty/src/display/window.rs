@@ -22,9 +22,15 @@ use std::fmt::{self, Display, Formatter};
 
 #[cfg(target_os = "macos")]
 use {
-    objc2::MainThreadMarker,
-    objc2_app_kit::{NSColor, NSColorSpace, NSView, NSWindowButton},
-    std::cell::Cell,
+    objc2::{MainThreadMarker, rc::Retained},
+    objc2_app_kit::{
+        NSColor, NSColorSpace, NSView, NSWindow, NSWindowButton, NSWindowOrderingMode,
+        NSWindowTabbingMode,
+    },
+    std::{
+        cell::Cell,
+        sync::atomic::{AtomicU64, Ordering},
+    },
     winit::platform::macos::{OptionAsAlt, WindowAttributesExtMacOS, WindowExtMacOS},
 };
 
@@ -143,6 +149,8 @@ impl Window {
         #[cfg(all(feature = "x11", not(any(target_os = "macos", windows))))]
         x11_visual: Option<X11VisualInfo>,
     ) -> Result<Window> {
+        #[cfg(target_os = "macos")]
+        let tab_requested = options.window_tabbing_id.is_some();
         let identity = identity.clone();
         let mut window_attributes = Window::get_platform_window(
             &identity,
@@ -190,6 +198,19 @@ impl Window {
             .with_window_level(config.window.level.into());
 
         let window = event_loop.create_window(window_attributes)?;
+
+        // Explicit New Window must stay separate even when macOS prefers tabs globally.
+        #[cfg(target_os = "macos")]
+        if !tab_requested {
+            static NEXT_TAB_GROUP: AtomicU64 = AtomicU64::new(1);
+            window.set_tabbing_identifier(&format!(
+                "alacritty-{}",
+                NEXT_TAB_GROUP.fetch_add(1, Ordering::Relaxed)
+            ));
+            if let Some(native) = native_window(&window) {
+                native.setTabbingMode(NSWindowTabbingMode::Disallowed);
+            }
+        }
 
         // Text cursor.
         let current_mouse_cursor = CursorIcon::Text;
@@ -532,6 +553,30 @@ impl Window {
         view.window().unwrap().setHasShadow(has_shadows);
     }
 
+    /// Attach explicitly: AppKit's automatic tabbing does not reliably join the first tab.
+    #[cfg(target_os = "macos")]
+    pub fn join_tab_group(&self, parent: &Window) {
+        if let (Some(window), Some(parent)) =
+            (native_window(&self.window), native_window(&parent.window))
+        {
+            window.setTabbingIdentifier(&parent.tabbingIdentifier());
+            parent.setTabbingMode(NSWindowTabbingMode::Preferred);
+            window.setTabbingMode(NSWindowTabbingMode::Preferred);
+            parent.addTabbedWindow_ordered(&window, NSWindowOrderingMode::Above);
+            window.makeKeyAndOrderFront(None);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn has_focus(&self) -> bool {
+        self.window.has_focus()
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn native_window_number(&self) -> Option<isize> {
+        native_window(&self.window).map(|window| window.windowNumber())
+    }
+
     /// Select tab at the given `index`.
     #[cfg(target_os = "macos")]
     pub fn select_tab_at_index(&self, index: usize) {
@@ -583,4 +628,14 @@ fn use_srgb_color_space(window: &WinitWindow) {
     };
 
     view.window().unwrap().setColorSpace(Some(&NSColorSpace::sRGBColorSpace()));
+}
+
+#[cfg(target_os = "macos")]
+fn native_window(window: &WinitWindow) -> Option<Retained<NSWindow>> {
+    let RawWindowHandle::AppKit(handle) = window.window_handle().ok()?.as_raw() else {
+        return None;
+    };
+    assert!(MainThreadMarker::new().is_some());
+    // SAFETY: Winit owns this live NSView; AppKit access is confined to the main thread.
+    unsafe { handle.ns_view.cast::<NSView>().as_ref() }.window()
 }

@@ -44,6 +44,7 @@ dependencies = [
  "copypasta",
  "crossfont",
  "dirs",
+ "dispatch2",
  "embed-resource",
  "gl_generator",
  "glutin",
