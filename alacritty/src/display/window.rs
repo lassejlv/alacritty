@@ -134,6 +134,7 @@ pub struct Window {
     current_mouse_cursor: CursorIcon,
     mouse_visible: bool,
     ime_inhibitor: ImeInhibitor,
+    pub pane_offset: (f32, f32),
 }
 
 impl Window {
@@ -243,6 +244,7 @@ impl Window {
             titlebar_color: Cell::new(None),
             is_x11,
             ime_inhibitor: Default::default(),
+            pane_offset: (0., 0.),
         })
     }
 
@@ -480,9 +482,14 @@ impl Window {
         // NOTE: X11 doesn't support cursor area, so we need to offset manually to not obscure
         // the text.
         let offset = if self.is_x11 { 1 } else { 0 };
-        let nspot_x = f64::from(size.padding_x() + point.column.0 as f32 * size.cell_width());
-        let nspot_y =
-            f64::from(size.padding_y() + (point.line + offset) as f32 * size.cell_height());
+        let nspot_x = f64::from(
+            self.pane_offset.0 + size.padding_x() + point.column.0 as f32 * size.cell_width(),
+        );
+        let nspot_y = f64::from(
+            self.pane_offset.1
+                + size.padding_y()
+                + (point.line + offset) as f32 * size.cell_height(),
+        );
 
         // NOTE: some compositors don't like excluding too much and try to render popup at the
         // bottom right corner of the provided area, so exclude just the full-width char to not

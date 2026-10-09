@@ -81,6 +81,10 @@ pub struct Processor<T: EventListener, A: ActionContext<T>> {
 
 pub trait ActionContext<T: EventListener> {
     fn write_to_pty<B: Into<Cow<'static, [u8]>>>(&self, _data: B) {}
+    fn pane_id(&self) -> crate::panes::PaneId {
+        0
+    }
+    fn pane_command(&mut self, _command: crate::panes::PaneCommand) {}
     fn mark_dirty(&mut self) {}
     fn size_info(&self) -> SizeInfo;
     fn copy_selection(&mut self, _ty: ClipboardType) {}
@@ -346,9 +350,17 @@ impl<T: EventListener> Execute<T> for Action {
             Action::Hide => ctx.window().set_visible(false),
             Action::Minimize => ctx.window().set_minimized(true),
             Action::Quit => {
-                ctx.window().hold = false;
-                ctx.terminal_mut().exit();
+                ctx.pane_command(crate::panes::PaneCommand::CloseTab);
             },
+            Action::SplitRight => {
+                ctx.pane_command(crate::panes::PaneCommand::Split(crate::panes::Axis::Horizontal))
+            },
+            Action::SplitDown => {
+                ctx.pane_command(crate::panes::PaneCommand::Split(crate::panes::Axis::Vertical))
+            },
+            Action::FocusNextPane => ctx.pane_command(crate::panes::PaneCommand::Next),
+            Action::FocusPreviousPane => ctx.pane_command(crate::panes::PaneCommand::Previous),
+            Action::ClosePane => ctx.pane_command(crate::panes::PaneCommand::Close),
             Action::IncreaseFontSize => ctx.change_font_size(FONT_SIZE_STEP),
             Action::DecreaseFontSize => ctx.change_font_size(-FONT_SIZE_STEP),
             Action::ResetFontSize => ctx.reset_font_size(),
@@ -717,7 +729,11 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
         }
         self.ctx.display().highlighted_hint = hint;
 
-        let timer_id = TimerId::new(Topic::SelectionScrolling, self.ctx.window().id());
+        let timer_id = TimerId::for_pane(
+            Topic::SelectionScrolling,
+            self.ctx.window().id(),
+            self.ctx.pane_id(),
+        );
         self.ctx.scheduler_mut().unschedule(timer_id);
 
         if let MouseButton::Left | MouseButton::Right = button {
@@ -1121,6 +1137,7 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
         let scale_factor = self.ctx.window().scale_factor;
         let size = self.ctx.size_info();
         let window_id = self.ctx.window().id();
+        let pane_id = self.ctx.pane_id();
         let scheduler = self.ctx.scheduler_mut();
 
         // Scale constants by DPI.
@@ -1138,15 +1155,16 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
         } else if mouse_y >= start_bottom {
             start_bottom - mouse_y - step
         } else {
-            scheduler.unschedule(TimerId::new(Topic::SelectionScrolling, window_id));
+            scheduler.unschedule(TimerId::for_pane(Topic::SelectionScrolling, window_id, pane_id));
             return;
         };
 
         // Scale number of lines scrolled based on distance to boundary.
-        let event = Event::new(EventType::Scroll(Scroll::Delta(delta / step)), Some(window_id));
+        let event = Event::new(EventType::Scroll(Scroll::Delta(delta / step)), Some(window_id))
+            .with_pane(pane_id);
 
         // Schedule event.
-        let timer_id = TimerId::new(Topic::SelectionScrolling, window_id);
+        let timer_id = TimerId::for_pane(Topic::SelectionScrolling, window_id, pane_id);
         scheduler.unschedule(timer_id);
         scheduler.schedule(event, SELECTION_SCROLLING_INTERVAL, true, timer_id);
     }

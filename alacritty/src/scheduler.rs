@@ -13,11 +13,16 @@ use crate::event::Event;
 pub struct TimerId {
     topic: Topic,
     window_id: WindowId,
+    pane_id: Option<crate::panes::PaneId>,
 }
 
 impl TimerId {
+    pub fn for_pane(topic: Topic, window_id: WindowId, pane_id: crate::panes::PaneId) -> Self {
+        Self { topic, window_id, pane_id: Some(pane_id) }
+    }
+
     pub fn new(topic: Topic, window_id: WindowId) -> Self {
-        Self { topic, window_id }
+        Self { topic, window_id, pane_id: None }
     }
 }
 
@@ -98,6 +103,12 @@ impl Scheduler {
     /// Check if a timer is already scheduled.
     pub fn scheduled(&mut self, id: TimerId) -> bool {
         self.timers.iter().any(|timer| timer.id == id)
+    }
+
+    /// Remove all timers scheduled for a pane.
+    pub fn unschedule_pane(&mut self, window_id: WindowId, pane_id: crate::panes::PaneId) {
+        self.timers
+            .retain(|timer| timer.id.window_id != window_id || timer.id.pane_id != Some(pane_id));
     }
 
     /// Remove all timers scheduled for a window.

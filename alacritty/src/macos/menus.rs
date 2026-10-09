@@ -9,7 +9,7 @@ use objc2_app_kit::{
 };
 use objc2_foundation::{NSObject, NSObjectProtocol, NSString};
 use winit::event_loop::EventLoopProxy;
-use winit::keyboard::{Key, ModifiersState};
+use winit::keyboard::{Key, ModifiersState, NamedKey};
 
 use crate::config::{Action, BindingKey, UiConfig};
 use crate::event::{Event, EventType};
@@ -18,6 +18,11 @@ use crate::event::{Event, EventType};
 pub enum Command {
     CreateNewWindow,
     CreateNewTab,
+    SplitRight,
+    SplitDown,
+    FocusNextPane,
+    FocusPreviousPane,
+    ClosePane,
     Quit,
     Copy,
     Paste,
@@ -40,6 +45,11 @@ impl Command {
         Some(match self {
             Self::CreateNewWindow => Action::CreateNewWindow,
             Self::CreateNewTab => Action::CreateNewTab,
+            Self::SplitRight => Action::SplitRight,
+            Self::SplitDown => Action::SplitDown,
+            Self::FocusNextPane => Action::FocusNextPane,
+            Self::FocusPreviousPane => Action::FocusPreviousPane,
+            Self::ClosePane => Action::ClosePane,
             Self::Quit => Action::Quit,
             Self::Copy => Action::Copy,
             Self::Paste => Action::Paste,
@@ -159,7 +169,11 @@ impl Menus {
         menus.add(&file, "New Window", "n", cmd, Command::CreateNewWindow);
         menus.add(&file, "New Tab", "t", cmd, Command::CreateNewTab);
         file.addItem(&NSMenuItem::separatorItem(mtm));
-        menus.add(&file, "Close Tab", "w", cmd, Command::Quit);
+        menus.add(&file, "Split Right", "d", cmd, Command::SplitRight);
+        menus.add(&file, "Split Down", "d", shift, Command::SplitDown);
+        file.addItem(&NSMenuItem::separatorItem(mtm));
+        menus.add(&file, "Close Pane", "w", cmd, Command::ClosePane);
+        menus.add(&file, "Close Tab", "w", shift, Command::Quit);
 
         let edit = Self::submenu(&bar, "Edit", mtm);
         menus.add(&edit, "Copy", "c", cmd, Command::Copy);
@@ -176,6 +190,21 @@ impl Menus {
         menus.add(&view, "Toggle Full Screen", "f", control, Command::ToggleFullscreen);
 
         let window = Self::submenu(&bar, "Window", mtm);
+        menus.add(
+            &window,
+            "Next Pane",
+            "\u{f703}",
+            cmd | NSEventModifierFlags::Option,
+            Command::FocusNextPane,
+        );
+        menus.add(
+            &window,
+            "Previous Pane",
+            "\u{f702}",
+            cmd | NSEventModifierFlags::Option,
+            Command::FocusPreviousPane,
+        );
+        window.addItem(&NSMenuItem::separatorItem(mtm));
         menus.add(&window, "Minimize", "m", cmd, Command::Minimize);
         menus.add(&window, "Next Tab", "]", shift, Command::SelectNextTab);
         menus.add(&window, "Previous Tab", "[", shift, Command::SelectPreviousTab);
@@ -204,10 +233,25 @@ impl Menus {
             if flags.contains(NSEventModifierFlags::Control) {
                 mods |= ModifiersState::CONTROL;
             }
-            let matching: Vec<_> = config.key_bindings().iter().filter(|binding| {
-                binding.mods == mods && matches!(&binding.trigger,
-                    BindingKey::Keycode { key: Key::Character(character), .. } if character.as_str().eq_ignore_ascii_case(key))
-            }).collect();
+            let matching: Vec<_> = config
+                .key_bindings()
+                .iter()
+                .filter(|binding| {
+                    binding.mods == mods
+                        && match &binding.trigger {
+                            BindingKey::Keycode { key: Key::Character(character), .. } => {
+                                character.as_str().eq_ignore_ascii_case(key)
+                            },
+                            BindingKey::Keycode {
+                                key: Key::Named(NamedKey::ArrowRight), ..
+                            } => key == "\u{f703}",
+                            BindingKey::Keycode {
+                                key: Key::Named(NamedKey::ArrowLeft), ..
+                            } => key == "\u{f702}",
+                            _ => false,
+                        }
+                })
+                .collect();
             let enabled = match command.action() {
                 Some(action) => matching.iter().any(|binding| binding.action == action),
                 None => matching.is_empty(),

@@ -1,4 +1,4 @@
-# macOS tabs, menus, and config migration
+# macOS tabs, split panes, menus, and config migration
 
 **Cmd+T** and **File → New Tab** add a tab to the current window, including the
 first tab. **Cmd+N** creates a separate window. Tab groups remain independent.
@@ -11,6 +11,35 @@ File, Edit, View, and Window menus provide terminal creation/closing, copy,
 paste, search, font sizing, clear scrollback, fullscreen, minimization, and tab
 navigation. Menu actions target the focused terminal. Native accelerators are
 removed when the corresponding terminal shortcut has been remapped in config.
+
+## Split panes
+
+Each native tab can contain multiple independent terminals. Splits can be nested:
+
+| Action | Shortcut | Menu |
+| --- | --- | --- |
+| Split the focused pane to the right | Cmd+D | File → Split Right |
+| Split the focused pane below | Cmd+Shift+D | File → Split Down |
+| Focus next / previous pane | Cmd+Option+Right / Left | Window → Next / Previous Pane |
+| Close the focused pane | Cmd+W | File → Close Pane |
+| Close the entire tab and its panes | Cmd+Shift+W | File → Close Tab |
+
+Click a pane to focus it, or drag a divider to resize its terminals. A subtle
+outline identifies the focused pane. New panes inherit the foreground process's
+working directory and start a new shell. Each pane keeps its own scrollback,
+selection, search, terminal colors, and cursor state. Scrolling targets the pane
+under the pointer without changing keyboard focus. Font size is shared by all
+panes in a tab.
+
+Closing a pane (or exiting its shell) expands its sibling. Closing the last pane
+closes its tab. Closing the native window/tab closes all its panes. Splits stay
+inside their tab when creating or switching tabs. A split is ignored if there
+isn't room for two panes with at least 12 columns and four rows each.
+
+Custom bindings can use `SplitRight`, `SplitDown`, `FocusNextPane`,
+`FocusPreviousPane`, and `ClosePane`. `Quit` closes the entire native tab. These
+actions also work on other platforms when configured explicitly; the default
+shortcuts and native menu integration above are macOS-specific.
 
 ## Migrate Ghostty Config
 
@@ -29,7 +58,8 @@ settings reload immediately; startup settings affect new terminals.
 Supported settings include font families/styles/sizes, hex RGB colors and ANSI
 palettes, cursor shape/blinking, selection colors, opacity, padding, blur,
 window dimensions, startup mode, Option-as-Alt, absolute working directories,
-and simple keyboard chords with equivalent Alacritty actions. Both window
+and simple keyboard chords with equivalent Alacritty actions, including right/down
+splits, next/previous pane focus, and closing a pane. Both window
 width and height must be specified to import startup dimensions.
 
 `config-file` includes follow Ghostty's order: included files load after their
@@ -40,7 +70,7 @@ bundled themes. Explicit config colors override theme colors.
 
 The preview reports unsupported or approximate settings. Examples include
 fallback fonts, font features, asymmetric padding, scrollback byte limits,
-splits, shaders, shell integration, commands, key sequences, global shortcuts,
+unsupported split directions/actions, shaders, shell integration, commands, key sequences, global shortcuts,
 and unresolved themes. Light/dark theme pairs import the currently selected
 appearance and report the loss of automatic theme switching. Commands in the
 source config or a theme are never executed. Only color settings are imported

@@ -222,6 +222,13 @@ pub enum Action {
 
     /// Create a new Alacritty window.
     CreateNewWindow,
+    /// Split the focused pane, placing a new terminal to its right.
+    SplitRight,
+    /// Split the focused pane, placing a new terminal below it.
+    SplitDown,
+    FocusNextPane,
+    FocusPreviousPane,
+    ClosePane,
 
     /// Create new window in a tab.
     CreateNewTab,
@@ -616,7 +623,12 @@ pub fn platform_key_bindings() -> Vec<KeyBinding> {
         "h",    ModifiersState::SUPER   | ModifiersState::ALT;                 Action::HideOtherApplications;
         "m",    ModifiersState::SUPER;                                         Action::Minimize;
         "q",    ModifiersState::SUPER;                                         Action::Quit;
-        "w",    ModifiersState::SUPER;                                         Action::Quit;
+        "w",    ModifiersState::SUPER;                                         Action::ClosePane;
+        "w",    ModifiersState::SUPER | ModifiersState::SHIFT;                 Action::Quit;
+        "d",    ModifiersState::SUPER;                                         Action::SplitRight;
+        "d",    ModifiersState::SUPER | ModifiersState::SHIFT;                 Action::SplitDown;
+        ArrowRight, ModifiersState::SUPER | ModifiersState::ALT;      Action::FocusNextPane;
+        ArrowLeft, ModifiersState::SUPER | ModifiersState::ALT;       Action::FocusPreviousPane;
         "f",    ModifiersState::SUPER, ~BindingMode::SEARCH;                   Action::SearchForward;
         "b",    ModifiersState::SUPER, ~BindingMode::SEARCH;                   Action::SearchBackward;
         "+" => KeyLocation::Numpad, ModifiersState::SUPER;                     Action::IncreaseFontSize;

@@ -834,7 +834,16 @@ _https://docs.rs/winit/latest/winit/keyboard/enum.Key.html#variant.Dead_
 		*Minimize*
 			Minimize the Alacritty window.
 		*Quit*
-			Quit Alacritty.
+			Close the native window/tab and all its terminal panes.
+
+		*SplitRight*, *SplitDown*
+			Create a new terminal pane to the right of or below the focused pane.
+
+		*FocusNextPane*, *FocusPreviousPane*
+			Move keyboard focus to the next or previous pane in layout order.
+
+		*ClosePane*
+			Close the focused terminal pane. Closing the last pane closes its tab.
 		*ClearLogNotice*
 			Clear warning and error notices.
 		*SpawnNewInstance*

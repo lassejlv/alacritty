@@ -529,6 +529,13 @@ impl ApplicationHandler<Event> for Processor {
                 }
             },
             (EventType::Terminal(TerminalEvent::Exit), Some(window_id)) => {
+                if let Some(window) = self.windows.get_mut(window_id) {
+                    if !window.display.window.hold
+                        && window.remove_exited_pane(event.pane_id, &mut self.scheduler)
+                    {
+                        return;
+                    }
+                }
                 // Remove the closed terminal.
                 let window_context = match self.windows.entry(*window_id) {
                     // Don't exit when terminal exits if user asked to hold the window.
@@ -573,7 +580,11 @@ impl ApplicationHandler<Event> for Processor {
                         &self.proxy,
                         &mut self.clipboard,
                         &mut self.scheduler,
-                        WinitEvent::UserEvent(Event::new(payload, *window_id)),
+                        WinitEvent::UserEvent(Event {
+                            payload,
+                            window_id: Some(*window_id),
+                            pane_id: event.pane_id,
+                        }),
                     );
                 }
             },
@@ -640,12 +651,20 @@ pub struct Event {
     window_id: Option<WindowId>,
 
     /// Event payload.
-    payload: EventType,
+    pub(crate) payload: EventType,
+
+    /// Route PTY and timer events to their originating pane; commands use current focus.
+    pub(crate) pane_id: Option<crate::panes::PaneId>,
 }
 
 impl Event {
+    pub fn with_pane(mut self, pane_id: crate::panes::PaneId) -> Self {
+        self.pane_id = Some(pane_id);
+        self
+    }
+
     pub fn new<I: Into<Option<WindowId>>>(payload: EventType, window_id: I) -> Self {
-        Self { window_id: window_id.into(), payload }
+        Self { window_id: window_id.into(), payload, pane_id: None }
     }
 }
 
@@ -659,6 +678,7 @@ impl From<Event> for WinitEvent<Event> {
 #[derive(Debug, Clone)]
 pub enum EventType {
     Terminal(TerminalEvent),
+    Pane(crate::panes::PaneCommand),
     ConfigReload(PathBuf),
     #[cfg(target_os = "macos")]
     MacosMenu(crate::macos::menus::Command, Option<isize>),
@@ -782,6 +802,7 @@ impl Default for InlineSearchState {
 }
 
 pub struct ActionContext<'a, N, T> {
+    pub pane_id: crate::panes::PaneId,
     pub notifier: &'a mut N,
     pub terminal: &'a mut Term<T>,
     pub clipboard: &'a mut Clipboard,
@@ -812,6 +833,17 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
     #[inline]
     fn write_to_pty<B: Into<Cow<'static, [u8]>>>(&self, val: B) {
         self.notifier.notify(val);
+    }
+
+    #[inline]
+    fn pane_id(&self) -> crate::panes::PaneId {
+        self.pane_id
+    }
+
+    fn pane_command(&mut self, command: crate::panes::PaneCommand) {
+        let _ = self
+            .event_proxy
+            .send_event(Event::new(EventType::Pane(command), self.display.window.id()));
     }
 
     /// Request a redraw.
@@ -1174,7 +1206,8 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
         }
 
         // Force unlimited search if the previous one was interrupted.
-        let timer_id = TimerId::new(Topic::DelayedSearch, self.display.window.id());
+        let timer_id =
+            TimerId::for_pane(Topic::DelayedSearch, self.display.window.id(), self.pane_id);
         if self.scheduler.scheduled(timer_id) {
             self.goto_match(None);
         }
@@ -1339,7 +1372,8 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
     #[inline]
     fn on_typing_start(&mut self) {
         // Disable cursor blinking.
-        let timer_id = TimerId::new(Topic::BlinkCursor, self.display.window.id());
+        let timer_id =
+            TimerId::for_pane(Topic::BlinkCursor, self.display.window.id(), self.pane_id);
         if self.scheduler.unschedule(timer_id).is_some() {
             self.schedule_blinking();
 
@@ -1668,7 +1702,8 @@ impl<'a, N: Notify + 'a, T: EventListener> ActionContext<'a, N, T> {
     /// Reset terminal to the state before search was started.
     fn search_reset_state(&mut self) {
         // Unschedule pending timers.
-        let timer_id = TimerId::new(Topic::DelayedSearch, self.display.window.id());
+        let timer_id =
+            TimerId::for_pane(Topic::DelayedSearch, self.display.window.id(), self.pane_id);
         self.scheduler.unschedule(timer_id);
 
         // Clear focused match.
@@ -1722,16 +1757,19 @@ impl<'a, N: Notify + 'a, T: EventListener> ActionContext<'a, N, T> {
                 self.search_state.display_offset_delta += old_offset - display_offset as i32;
 
                 // Since we found a result, we require no delayed re-search.
-                let timer_id = TimerId::new(Topic::DelayedSearch, self.display.window.id());
+                let timer_id =
+                    TimerId::for_pane(Topic::DelayedSearch, self.display.window.id(), self.pane_id);
                 self.scheduler.unschedule(timer_id);
             },
             // Reset viewport only when we know there is no match, to prevent unnecessary jumping.
             None if limit.is_none() => self.search_reset_state(),
             None => {
                 // Schedule delayed search if we ran into our search limit.
-                let timer_id = TimerId::new(Topic::DelayedSearch, self.display.window.id());
+                let timer_id =
+                    TimerId::for_pane(Topic::DelayedSearch, self.display.window.id(), self.pane_id);
                 if !self.scheduler.scheduled(timer_id) {
-                    let event = Event::new(EventType::SearchNext, self.display.window.id());
+                    let event = Event::new(EventType::SearchNext, self.display.window.id())
+                        .with_pane(self.pane_id);
                     self.scheduler.schedule(event, TYPING_SEARCH_DELAY, false, timer_id);
                 }
 
@@ -1773,8 +1811,8 @@ impl<'a, N: Notify + 'a, T: EventListener> ActionContext<'a, N, T> {
 
         // Update cursor blinking state.
         let window_id = self.display.window.id();
-        self.scheduler.unschedule(TimerId::new(Topic::BlinkCursor, window_id));
-        self.scheduler.unschedule(TimerId::new(Topic::BlinkTimeout, window_id));
+        self.scheduler.unschedule(TimerId::for_pane(Topic::BlinkCursor, window_id, self.pane_id));
+        self.scheduler.unschedule(TimerId::for_pane(Topic::BlinkTimeout, window_id, self.pane_id));
 
         // Reset blinking timeout.
         *self.cursor_blink_timed_out = false;
@@ -1790,8 +1828,8 @@ impl<'a, N: Notify + 'a, T: EventListener> ActionContext<'a, N, T> {
 
     fn schedule_blinking(&mut self) {
         let window_id = self.display.window.id();
-        let timer_id = TimerId::new(Topic::BlinkCursor, window_id);
-        let event = Event::new(EventType::BlinkCursor, window_id);
+        let timer_id = TimerId::for_pane(Topic::BlinkCursor, window_id, self.pane_id);
+        let event = Event::new(EventType::BlinkCursor, window_id).with_pane(self.pane_id);
         let blinking_interval = Duration::from_millis(self.config.cursor.blink_interval());
         self.scheduler.schedule(event, blinking_interval, true, timer_id);
     }
@@ -1803,8 +1841,8 @@ impl<'a, N: Notify + 'a, T: EventListener> ActionContext<'a, N, T> {
         }
 
         let window_id = self.display.window.id();
-        let event = Event::new(EventType::BlinkCursorTimeout, window_id);
-        let timer_id = TimerId::new(Topic::BlinkTimeout, window_id);
+        let event = Event::new(EventType::BlinkCursorTimeout, window_id).with_pane(self.pane_id);
+        let timer_id = TimerId::for_pane(Topic::BlinkTimeout, window_id, self.pane_id);
 
         self.scheduler.schedule(event, blinking_timeout, false, timer_id);
     }
@@ -2002,7 +2040,11 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                 },
                 EventType::BlinkCursorTimeout => {
                     // Disable blinking after timeout reached.
-                    let timer_id = TimerId::new(Topic::BlinkCursor, self.ctx.display.window.id());
+                    let timer_id = TimerId::for_pane(
+                        Topic::BlinkCursor,
+                        self.ctx.display.window.id(),
+                        self.ctx.pane_id,
+                    );
                     self.ctx.scheduler.unschedule(timer_id);
                     *self.ctx.cursor_blink_timed_out = true;
                     self.ctx.display.cursor_hidden = false;
@@ -2081,6 +2123,7 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                 EventType::IpcConfig(_) | EventType::IpcGetConfig(..) | EventType::Shutdown => (),
                 EventType::Message(_)
                 | EventType::ConfigReload(_)
+                | EventType::Pane(_)
                 | EventType::CreateWindow(_)
                 | EventType::Frame => (),
             },
@@ -2222,21 +2265,28 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
 pub struct EventProxy {
     proxy: EventLoopProxy<Event>,
     window_id: WindowId,
+    pane_id: crate::panes::PaneId,
 }
 
 impl EventProxy {
+    pub fn with_pane(mut self, pane_id: crate::panes::PaneId) -> Self {
+        self.pane_id = pane_id;
+        self
+    }
+
     pub fn new(proxy: EventLoopProxy<Event>, window_id: WindowId) -> Self {
-        Self { proxy, window_id }
+        Self { proxy, window_id, pane_id: 0 }
     }
 
     /// Send an event to the event loop.
     pub fn send_event(&self, event: EventType) {
-        let _ = self.proxy.send_event(Event::new(event, self.window_id));
+        let _ = self.proxy.send_event(Event::new(event, self.window_id).with_pane(self.pane_id));
     }
 }
 
 impl EventListener for EventProxy {
     fn send_event(&self, event: TerminalEvent) {
-        let _ = self.proxy.send_event(Event::new(event.into(), self.window_id));
+        let _ =
+            self.proxy.send_event(Event::new(event.into(), self.window_id).with_pane(self.pane_id));
     }
 }

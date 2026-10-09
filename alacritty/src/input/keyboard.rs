@@ -279,7 +279,8 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
     /// Reset search delay.
     fn reset_search_delay(&mut self) {
         if self.ctx.search_active() {
-            let timer_id = TimerId::new(Topic::DelayedSearch, self.ctx.window().id());
+            let timer_id =
+                TimerId::for_pane(Topic::DelayedSearch, self.ctx.window().id(), self.ctx.pane_id());
             let scheduler = self.ctx.scheduler_mut();
             if let Some(timer) = scheduler.unschedule(timer_id) {
                 scheduler.schedule(timer.event, TYPING_SEARCH_DELAY, false, timer.id);
