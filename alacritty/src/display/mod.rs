@@ -339,7 +339,46 @@ impl DisplayUpdate {
 }
 
 /// The display wraps a window, font rasterizer, and GPU renderer.
+/// Rendering state owned by an individual terminal pane. GL resources remain shared.
+pub struct PaneDisplay {
+    size_info: SizeInfo,
+    highlighted_hint: Option<HintMatch>,
+    highlighted_hint_age: usize,
+    vi_highlighted_hint: Option<HintMatch>,
+    vi_highlighted_hint_age: usize,
+    cursor_hidden: bool,
+    visual_bell: VisualBell,
+    hint_state: HintState,
+    pending_update: DisplayUpdate,
+    ime: Ime,
+    damage_tracker: DamageTracker,
+    hint_mouse_point: Option<Point>,
+}
+
+impl PaneDisplay {
+    pub fn new(size_info: SizeInfo, config: &UiConfig) -> Self {
+        let mut damage_tracker = DamageTracker::new(size_info.screen_lines(), size_info.columns());
+        damage_tracker.debug = config.debug.highlight_damage;
+        Self {
+            size_info,
+            damage_tracker,
+            visual_bell: VisualBell::from(&config.bell),
+            hint_state: HintState::new(config.hints.alphabet()),
+            highlighted_hint: Default::default(),
+            highlighted_hint_age: Default::default(),
+            vi_highlighted_hint: Default::default(),
+            vi_highlighted_hint_age: Default::default(),
+            cursor_hidden: Default::default(),
+            pending_update: Default::default(),
+            ime: Default::default(),
+            hint_mouse_point: Default::default(),
+        }
+    }
+}
+
 pub struct Display {
+    pub window_size: PhysicalSize<u32>,
+    pub composite: bool,
     pub window: Window,
 
     pub size_info: SizeInfo,
@@ -400,6 +439,37 @@ pub struct Display {
 }
 
 impl Display {
+    pub fn resize_pane(&mut self, rect: crate::panes::Rect, cell: (f32, f32), config: &UiConfig) {
+        let padding = config.window.padding(self.window.scale_factor as f32);
+        self.size_info = SizeInfo::new(
+            rect.width.max(1.),
+            rect.height.max(1.),
+            cell.0,
+            cell.1,
+            padding.0,
+            padding.1,
+            config.window.dynamic_padding,
+        );
+        self.damage_tracker.resize(self.size_info.screen_lines(), self.size_info.columns());
+        self.pending_update.dirty = true;
+        self.pending_renderer_update.get_or_insert(Default::default()).resize = true;
+    }
+
+    pub fn swap_pane(&mut self, pane: &mut PaneDisplay) {
+        mem::swap(&mut self.size_info, &mut pane.size_info);
+        mem::swap(&mut self.highlighted_hint, &mut pane.highlighted_hint);
+        mem::swap(&mut self.highlighted_hint_age, &mut pane.highlighted_hint_age);
+        mem::swap(&mut self.vi_highlighted_hint, &mut pane.vi_highlighted_hint);
+        mem::swap(&mut self.vi_highlighted_hint_age, &mut pane.vi_highlighted_hint_age);
+        mem::swap(&mut self.cursor_hidden, &mut pane.cursor_hidden);
+        mem::swap(&mut self.visual_bell, &mut pane.visual_bell);
+        mem::swap(&mut self.hint_state, &mut pane.hint_state);
+        mem::swap(&mut self.pending_update, &mut pane.pending_update);
+        mem::swap(&mut self.ime, &mut pane.ime);
+        mem::swap(&mut self.damage_tracker, &mut pane.damage_tracker);
+        mem::swap(&mut self.hint_mouse_point, &mut pane.hint_mouse_point);
+    }
+
     pub fn new(
         window: Window,
         gl_context: NotCurrentContext,
@@ -517,6 +587,8 @@ impl Display {
         }
 
         Ok(Self {
+            window_size: PhysicalSize::new(size_info.width() as u32, size_info.height() as u32),
+            composite: false,
             context: ManuallyDrop::new(context),
             visual_bell: VisualBell::from(&config.bell),
             renderer: ManuallyDrop::new(renderer),
@@ -612,7 +684,8 @@ impl Display {
             #[cfg(not(any(target_os = "macos", windows)))]
             (Surface::Egl(surface), PossiblyCurrentContext::Egl(context))
                 if matches!(self.raw_window_handle, RawWindowHandle::Wayland(_))
-                    && !self.damage_tracker.debug =>
+                    && !self.damage_tracker.debug
+                    && !self.composite =>
             {
                 let damage = self.damage_tracker.shape_frame_damage(self.size_info.into());
                 surface.swap_buffers_with_damage(context, &damage)
@@ -713,8 +786,8 @@ impl Display {
         }
 
         // Resize when terminal when its dimensions have changed.
-        if self.size_info.screen_lines() != new_size.screen_lines
-            || self.size_info.columns() != new_size.columns()
+        if terminal.screen_lines() != new_size.screen_lines
+            || terminal.columns() != new_size.columns()
         {
             // Resize PTY.
             pty_resize_handle.on_resize(new_size.into());
@@ -751,8 +824,8 @@ impl Display {
 
         // Resize renderer.
         if renderer_update.resize {
-            let width = NonZeroU32::new(self.size_info.width() as u32).unwrap();
-            let height = NonZeroU32::new(self.size_info.height() as u32).unwrap();
+            let width = NonZeroU32::new(self.window_size.width.max(1)).unwrap();
+            let height = NonZeroU32::new(self.window_size.height.max(1)).unwrap();
             self.surface.resize(&self.context, width, height);
         }
 
@@ -777,10 +850,10 @@ impl Display {
     pub fn draw<T: EventListener>(
         &mut self,
         mut terminal: MutexGuard<'_, Term<T>>,
-        scheduler: &mut Scheduler,
         message_buffer: &MessageBuffer,
         config: &UiConfig,
         search_state: &mut SearchState,
+        focused: bool,
     ) {
         // Collect renderable content before the terminal is dropped.
         let mut content = RenderableContent::new(config, self, &terminal, search_state);
@@ -838,7 +911,10 @@ impl Display {
         self.make_current();
 
         #[cfg(target_os = "macos")]
-        self.window.set_titlebar_color(background_color);
+        if focused {
+            self.window.set_titlebar_color(background_color);
+        }
+        self.renderer.resize(&size_info);
         self.renderer.clear(background_color, config.window_opacity());
         let mut lines = RenderLines::new();
 
@@ -953,7 +1029,7 @@ impl Display {
         };
 
         // Handle IME.
-        if self.ime.is_enabled() {
+        if focused && self.ime.is_enabled() {
             if let Some(point) = ime_position {
                 let (fg, bg) = if search_state.regex().is_some() {
                     (config.colors.footer_bar_foreground(), config.colors.footer_bar_background())
@@ -1020,17 +1096,55 @@ impl Display {
             self.draw_hyperlink_preview(config, cursor_point, display_offset);
         }
 
-        // Notify winit that we're about to present.
-        self.window.pre_present_notify();
-
-        // Highlight damage for debugging.
         if self.damage_tracker.debug {
-            let damage = self.damage_tracker.shape_frame_damage(self.size_info.into());
-            let mut rects = Vec::with_capacity(damage.len());
+            let mut rects = Vec::new();
             self.highlight_damage(&mut rects);
-            self.renderer.draw_rects(&self.size_info, &metrics, rects);
+            self.renderer.draw_rects(&size_info, &metrics, rects);
         }
+        if self.composite {
+            self.damage_tracker.swap_damage();
+        }
+        if self.composite && focused {
+            let color = config.colors.normal.blue;
+            let w = size_info.width();
+            let h = size_info.height();
+            let thickness = self.window.scale_factor as f32;
+            self.renderer.draw_rects(&size_info, &metrics, vec![
+                RenderRect::new(0., 0., w, thickness, color, 1.),
+                RenderRect::new(0., h - thickness, w, thickness, color, 1.),
+                RenderRect::new(0., 0., thickness, h, color, 1.),
+                RenderRect::new(w - thickness, 0., thickness, h, color, 1.),
+            ]);
+        }
+    }
 
+    /// Begin one complete frame; pane clears are clipped to their own rectangles.
+    pub fn begin_panes(&mut self, config: &UiConfig) {
+        self.make_current();
+        self.renderer.set_pane(None);
+        let bg = config.colors.primary.background;
+        let fg = config.colors.primary.foreground;
+        let mix = |a: u8, b: u8| ((u16::from(a) * 4 + u16::from(b)) / 5) as u8;
+        self.renderer.clear(
+            Rgb::new(mix(bg.r, fg.r), mix(bg.g, fg.g), mix(bg.b, fg.b)),
+            config.window_opacity(),
+        );
+    }
+
+    pub fn pane_viewport(&mut self, rect: crate::panes::Rect) {
+        self.make_current();
+        self.renderer.set_pane(Some((
+            rect.x as i32,
+            self.window_size.height as i32 - (rect.y + rect.height) as i32,
+            rect.width as i32,
+            rect.height as i32,
+        )));
+    }
+
+    /// Present the completed frame exactly once, regardless of its pane count.
+    pub fn present(&mut self, scheduler: &mut Scheduler) {
+        self.renderer.set_pane(None);
+        self.window.pre_present_notify();
         // Clearing debug highlights from the previous frame requires full redraw.
         self.swap_buffers();
 
@@ -1046,8 +1160,9 @@ impl Display {
         if !matches!(self.raw_window_handle, RawWindowHandle::Wayland(_)) {
             self.request_frame(scheduler);
         }
-
-        self.damage_tracker.swap_damage();
+        if !self.composite {
+            self.damage_tracker.swap_damage();
+        }
     }
 
     /// Update to a new configuration.

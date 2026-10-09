@@ -628,7 +628,12 @@ fn keybinding(value: &str) -> Option<Value> {
     let action = match action.trim() {
         "new_tab" => "CreateNewTab",
         "new_window" => "CreateNewWindow",
-        "close_surface" | "close_tab" => "Quit",
+        "close_surface" => "ClosePane",
+        "close_tab" => "Quit",
+        "new_split:right" => "SplitRight",
+        "new_split:down" => "SplitDown",
+        "goto_split:next" => "FocusNextPane",
+        "goto_split:previous" => "FocusPreviousPane",
         "copy_to_clipboard" => "Copy",
         "paste_from_clipboard" => "Paste",
         "previous_tab" => "SelectPreviousTab",
@@ -660,6 +665,18 @@ fn keybinding(value: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imports_split_bindings_and_distinguishes_pane_from_tab_close() {
+        let value = keybinding("super+d=new_split:right").unwrap();
+        assert_eq!(value["action"].as_str(), Some("SplitRight"));
+        let value = keybinding("super+w=close_surface").unwrap();
+        assert_eq!(value["action"].as_str(), Some("ClosePane"));
+        let value = keybinding("super+shift+w=close_tab").unwrap();
+        assert_eq!(value["action"].as_str(), Some("Quit"));
+        assert!(keybinding("super+d=new_split:auto").is_none());
+    }
+
     #[test]
     fn themes_includes_and_explicit_colors_have_ghostty_precedence() {
         let dir = tempfile::tempdir().unwrap();

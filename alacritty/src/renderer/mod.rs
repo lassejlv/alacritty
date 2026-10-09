@@ -87,6 +87,7 @@ enum TextRendererProvider {
 
 #[derive(Debug)]
 pub struct Renderer {
+    origin: (i32, i32),
     text_renderer: TextRendererProvider,
     rect_renderer: RectRenderer,
     robustness: bool,
@@ -171,7 +172,7 @@ impl Renderer {
             }
         }
 
-        Ok(Self { text_renderer, rect_renderer, robustness })
+        Ok(Self { text_renderer, rect_renderer, robustness, origin: (0, 0) })
     }
 
     pub fn draw_cells<I: Iterator<Item = RenderableCell>>(
@@ -248,7 +249,12 @@ impl Renderer {
         // Prepare rect rendering state.
         unsafe {
             // Remove padding from viewport.
-            gl::Viewport(0, 0, size_info.width() as i32, size_info.height() as i32);
+            gl::Viewport(
+                self.origin.0,
+                self.origin.1,
+                size_info.width() as i32,
+                size_info.height() as i32,
+            );
             gl::BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::SRC_ALPHA, gl::ONE);
         }
 
@@ -326,13 +332,29 @@ impl Renderer {
         }
     }
 
+    /// Set a clipped pane viewport in framebuffer coordinates. The caller makes our GL
+    /// context current before changing state; all values are physical pixel dimensions.
+    pub fn set_pane(&mut self, pane: Option<(i32, i32, i32, i32)>) {
+        // SAFETY: These loaded OpenGL functions only change state on the current context.
+        unsafe {
+            if let Some((x, y, width, height)) = pane {
+                self.origin = (x, y);
+                gl::Enable(gl::SCISSOR_TEST);
+                gl::Scissor(x, y, width.max(0), height.max(0));
+            } else {
+                self.origin = (0, 0);
+                gl::Disable(gl::SCISSOR_TEST);
+            }
+        }
+    }
+
     /// Set the viewport for cell rendering.
     #[inline]
     pub fn set_viewport(&self, size: &SizeInfo) {
         unsafe {
             gl::Viewport(
-                size.padding_x() as i32,
-                size.padding_y() as i32,
+                self.origin.0 + size.padding_x() as i32,
+                self.origin.1 + size.padding_y() as i32,
                 size.width() as i32 - 2 * size.padding_x() as i32,
                 size.height() as i32 - 2 * size.padding_y() as i32,
             );

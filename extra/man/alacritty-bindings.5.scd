@@ -525,7 +525,27 @@ configuration. See *alacritty*(5) for full configuration format documentation.
 |  _"W"_
 :  _"Command"_
 :[
+:  _"ClosePane"_
+|  _"W"_
+:  _"Command|Shift"_
+:[
 :  _"Quit"_
+|  _"D"_
+:  _"Command"_
+:[
+:  _"SplitRight"_
+|  _"D"_
+:  _"Command|Shift"_
+:[
+:  _"SplitDown"_
+|  _"ArrowRight"_
+:  _"Command|Alt"_
+:[
+:  _"FocusNextPane"_
+|  _"ArrowLeft"_
+:  _"Command|Alt"_
+:[
+:  _"FocusPreviousPane"_
 |  _"N"_
 :  _"Command"_
 :[
