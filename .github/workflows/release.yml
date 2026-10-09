@@ -32,7 +32,8 @@ jobs:
         run: python3 scripts/release/macos-version.py env
       - name: Install dependencies and Rust targets
         run: |
-          brew install scdoc
+          brew install scdoc openssl@3
+          echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
           rustup update stable --no-self-update
           rustup default stable
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
