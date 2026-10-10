@@ -20,11 +20,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - OSC 99 bounded notification assembly, lifecycle handling, and host delivery events
 
 - OSC 7501 program status records, feature detection, and lifecycle handling
+- `input` module with winit-independent keyboard (legacy, xterm and Kitty) and mouse report encoders
+- `term::hints` module with URL detection and hyperlink lookup helpers
+- `Term::title` for the current window title
 
 ### Changed
 
 - **Move `event_loop`, `tty`, `sync`, and `thread` to `alacritty_session`; `tty` is now `pty`**
 - Emit `ProgramStatusChanged` events; window-title formatting is owned by the application
+- **Emit `Event::WorkingDirectoryChanged` when OSC 7 changes the working directory**
 
 - Minimum Rust version has been bumped to 1.99.0
 

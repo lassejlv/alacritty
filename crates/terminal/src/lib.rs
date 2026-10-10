@@ -6,6 +6,7 @@ pub mod event;
 pub mod graphics;
 pub mod grid;
 pub mod index;
+pub mod input;
 pub mod protocols;
 pub use protocols::{clipboard, program_status};
 pub mod selection;

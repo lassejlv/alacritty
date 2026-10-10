@@ -29,6 +29,7 @@ use crate::vte::ansi::{
 pub mod cell;
 pub mod color;
 mod graphics;
+pub mod hints;
 pub mod search;
 mod shell;
 
@@ -876,6 +877,11 @@ impl<T> Term<T> {
         &self,
     ) -> Option<&crate::protocols::working_directory::WorkingDirectory> {
         self.working_directory.as_ref()
+    }
+
+    /// Window title set by the application, or `None` for the host's default title.
+    pub fn title(&self) -> Option<&str> {
+        self.title.as_deref()
     }
 
     fn update_title(&self)
@@ -2398,9 +2404,13 @@ impl<T: EventListener> Handler for Term<T> {
     }
 
     fn working_directory(&mut self, body: &[u8]) {
-        if let Some(directory) = crate::protocols::working_directory::WorkingDirectory::parse(body)
-        {
+        let Some(directory) = crate::protocols::working_directory::WorkingDirectory::parse(body)
+        else {
+            return;
+        };
+        if self.working_directory.as_ref() != Some(&directory) {
             self.working_directory = Some(directory);
+            self.event_proxy.send_event(Event::WorkingDirectoryChanged);
         }
     }
 

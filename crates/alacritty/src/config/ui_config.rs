@@ -16,6 +16,7 @@ use alacritty_config::SerdeReplace;
 use alacritty_config_derive::{ConfigDeserialize, SerdeReplace};
 use alacritty_session::pty::{Options as PtyOptions, Shell};
 use alacritty_terminal::term::Config as TermConfig;
+use alacritty_terminal::term::hints::URL_REGEX;
 use alacritty_terminal::term::search::RegexSearch;
 
 use crate::config::LOG_TARGET_CONFIG;
@@ -34,11 +35,6 @@ use crate::config::scrolling::Scrolling;
 use crate::config::selection::Selection;
 use crate::config::terminal::Terminal;
 use crate::config::window::WindowConfig;
-
-/// Regex used for the default URL hint.
-#[rustfmt::skip]
-const URL_REGEX: &str = "(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file:|git://|ssh:|ftp://)\
-                         [^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`\\\\]+";
 
 #[derive(ConfigDeserialize, Serialize, Default, Clone, Debug, PartialEq)]
 pub struct UiConfig {

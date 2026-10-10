@@ -22,6 +22,8 @@ pub enum Event {
     ProgramStatusChanged,
     /// OSC 9;4 progress changed.
     ProgressChanged,
+    /// OSC 7 working directory changed; read it with `Term::working_directory`.
+    WorkingDirectoryChanged,
     DesktopNotification {
         body: Vec<u8>,
         truncated: bool,
@@ -90,6 +92,7 @@ impl Debug for Event {
             Event::MouseCursorDirty => write!(f, "MouseCursorDirty"),
             Event::ProgramStatusChanged => write!(f, "ProgramStatusChanged"),
             Event::ProgressChanged => write!(f, "ProgressChanged"),
+            Event::WorkingDirectoryChanged => write!(f, "WorkingDirectoryChanged"),
             Event::DesktopNotification { .. } => write!(f, "DesktopNotification"),
             Event::NotificationsReset => write!(f, "NotificationsReset"),
             Event::ResetTitle => write!(f, "ResetTitle"),

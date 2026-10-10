@@ -143,6 +143,7 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                     | TerminalEvent::Wakeup
                     | TerminalEvent::DesktopNotification { .. }
                     | TerminalEvent::NotificationsReset
+                    | TerminalEvent::WorkingDirectoryChanged
                     | TerminalEvent::ProgramStatusChanged => (),
                 },
                 #[cfg(unix)]

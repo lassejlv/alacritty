@@ -20,6 +20,8 @@ use winit::window::CursorIcon;
 use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Point, Side};
+use alacritty_terminal::input::keyboard::Modifiers as ReportModifiers;
+use alacritty_terminal::input::mouse;
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::{ClipboardType, TermMode};
 
@@ -284,71 +286,18 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
             return;
         }
 
-        // Calculate modifiers value.
-        let mut mods = 0;
         let modifiers = self.ctx.modifiers().state();
-        if modifiers.shift_key() {
-            mods += 4;
+        let mut mods = ReportModifiers::empty();
+        mods.set(ReportModifiers::SHIFT, modifiers.shift_key());
+        mods.set(ReportModifiers::ALT, modifiers.alt_key());
+        mods.set(ReportModifiers::CONTROL, modifiers.control_key());
+
+        let pressed = state == ElementState::Pressed;
+        let mode = *self.ctx.terminal().mode();
+        let line = point.line.0 as usize;
+        if let Some(report) = mouse::report(button, pressed, point.column.0, line, mods, mode) {
+            self.ctx.write_to_pty(report);
         }
-        if modifiers.alt_key() {
-            mods += 8;
-        }
-        if modifiers.control_key() {
-            mods += 16;
-        }
-
-        // Report mouse events.
-        if self.ctx.terminal().mode().contains(TermMode::SGR_MOUSE) {
-            self.sgr_mouse_report(point, button + mods, state);
-        } else if let ElementState::Released = state {
-            self.normal_mouse_report(point, 3 + mods);
-        } else {
-            self.normal_mouse_report(point, button + mods);
-        }
-    }
-
-    fn normal_mouse_report(&mut self, point: Point, button: u8) {
-        let Point { line, column } = point;
-        let utf8 = self.ctx.terminal().mode().contains(TermMode::UTF8_MOUSE);
-
-        let max_point = if utf8 { 2015 } else { 223 };
-
-        if line >= max_point || column >= max_point {
-            return;
-        }
-
-        let mut msg = vec![b'\x1b', b'[', b'M', 32 + button];
-
-        let mouse_pos_encode = |pos: usize| -> Vec<u8> {
-            let pos = 32 + 1 + pos;
-            let first = 0xC0 + pos / 64;
-            let second = 0x80 + (pos & 63);
-            vec![first as u8, second as u8]
-        };
-
-        if utf8 && column >= Column(95) {
-            msg.append(&mut mouse_pos_encode(column.0));
-        } else {
-            msg.push(32 + 1 + column.0 as u8);
-        }
-
-        if utf8 && line >= 95 {
-            msg.append(&mut mouse_pos_encode(line.0 as usize));
-        } else {
-            msg.push(32 + 1 + line.0 as u8);
-        }
-
-        self.ctx.write_to_pty(msg);
-    }
-
-    fn sgr_mouse_report(&mut self, point: Point, button: u8, state: ElementState) {
-        let c = match state {
-            ElementState::Pressed => 'M',
-            ElementState::Released => 'm',
-        };
-
-        let msg = format!("\x1b[<{};{};{}{}", button, point.column + 1, point.line + 1, c);
-        self.ctx.write_to_pty(msg.into_bytes());
     }
 
     fn on_mouse_press(&mut self, button: MouseButton) {
