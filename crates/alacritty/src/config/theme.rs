@@ -14,6 +14,7 @@ include!(concat!(env!("OUT_DIR"), "/themes.rs"));
 ///
 /// Matching ignores case and punctuation, so Ghostty names like `TokyoNight Storm` also resolve
 /// to `tokyo-night-storm`.
+#[cfg(target_os = "macos")]
 pub fn find(name: &str) -> Option<&'static str> {
     builtin(name).map(|(name, _)| *name)
 }
@@ -96,6 +97,7 @@ mod tests {
 
     #[test]
     fn theme_names_ignore_case_and_punctuation() {
+        let find = |name| builtin(name).map(|(name, _)| *name);
         assert_eq!(find("TokyoNight Storm"), Some("tokyo-night-storm"));
         assert_eq!(find("tokyo_night"), Some("tokyo-night"));
         assert_eq!(find("missing"), None);
