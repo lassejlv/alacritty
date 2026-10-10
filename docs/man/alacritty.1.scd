@@ -108,6 +108,11 @@ set of features with high performance.
 
 	Send IPC socket messages (see *alacritty-msg*(1)).
 
+*themes*
+
+	List the color themes available to *general.theme*, one per line. This
+	includes user themes, which replace built-in themes of the same name.
+
 *migrate*
 
 	Migrate the configuration file.

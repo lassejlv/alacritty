@@ -146,6 +146,12 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(themes)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_alacritty__help_commands" \
@@ -190,6 +196,10 @@ esac
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(themes)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -208,6 +218,7 @@ _alacritty_commands() {
     local commands; commands=(
 'msg:Send a message to the Alacritty socket' \
 'migrate:Migrate the configuration file' \
+'themes:List available color themes' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'alacritty commands' commands "$@"
@@ -217,6 +228,7 @@ _alacritty__help_commands() {
     local commands; commands=(
 'msg:Send a message to the Alacritty socket' \
 'migrate:Migrate the configuration file' \
+'themes:List available color themes' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'alacritty help commands' commands "$@"
@@ -254,6 +266,11 @@ _alacritty__help__msg__create-window_commands() {
 _alacritty__help__msg__get-config_commands() {
     local commands; commands=()
     _describe -t commands 'alacritty help msg get-config commands' commands "$@"
+}
+(( $+functions[_alacritty__help__themes_commands] )) ||
+_alacritty__help__themes_commands() {
+    local commands; commands=()
+    _describe -t commands 'alacritty help themes commands' commands "$@"
 }
 (( $+functions[_alacritty__migrate_commands] )) ||
 _alacritty__migrate_commands() {
@@ -314,6 +331,11 @@ _alacritty__msg__help__get-config_commands() {
 _alacritty__msg__help__help_commands() {
     local commands; commands=()
     _describe -t commands 'alacritty msg help help commands' commands "$@"
+}
+(( $+functions[_alacritty__themes_commands] )) ||
+_alacritty__themes_commands() {
+    local commands; commands=()
+    _describe -t commands 'alacritty themes commands' commands "$@"
 }
 
 if [ "$funcstack[1]" = "_alacritty" ]; then

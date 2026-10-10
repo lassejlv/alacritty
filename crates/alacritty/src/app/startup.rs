@@ -29,6 +29,17 @@ use crate::ipc::{IoListener, server as ipc};
 #[cfg(target_os = "macos")]
 use crate::platform::macos::locale;
 
+/// Print one theme name per line, for `alacritty themes`.
+fn print_themes() -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    let result = config::theme::list().iter().try_for_each(|name| writeln!(stdout, "{name}"));
+    // Stop quietly when piped into a reader that exits early, like `head`.
+    match result {
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        result => result,
+    }
+}
+
 pub fn run() -> Result<(), Box<dyn Error>> {
     #[cfg(windows)]
     crate::platform::windows::panic::attach_handler();
@@ -48,6 +59,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         #[cfg(unix)]
         Some(Subcommands::Msg(options)) => msg(options)?,
         Some(Subcommands::Migrate(options)) => migrate::migrate(options),
+        Some(Subcommands::Themes) => print_themes()?,
         None => alacritty(options)?,
     }
 

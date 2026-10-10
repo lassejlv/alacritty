@@ -19,6 +19,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 
 - Built-in color themes selected with `general.theme`, converted from 66 popular Ghostty themes
 - User color themes in `~/.config/alacritty/themes/`, selected with `general.theme`
+- `alacritty themes` subcommand listing available color themes
 - OSC 133 shell command tracking, command navigation, and copying/selecting command output
 - OSC 7 working-directory reports and automatic zsh shell integration
 - OSC 99 native desktop notifications with pane activation, replies, updates, and expiry

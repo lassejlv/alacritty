@@ -23,6 +23,25 @@ pub fn find(name: &str) -> Option<&'static str> {
     builtin(name).map(|(name, _)| *name)
 }
 
+/// Names of all user and built-in themes, sorted.
+///
+/// A user theme replaces the built-in theme it shares a name with.
+pub fn list() -> Vec<String> {
+    list_from(user_themes_dir().as_deref())
+}
+
+fn list_from(user_dir: Option<&Path>) -> Vec<String> {
+    let mut names: Vec<_> =
+        user_dir.map(user_themes).unwrap_or_default().iter().map(|path| stem(path)).collect();
+    for (name, _) in BUILTIN_THEMES {
+        if !names.iter().any(|user| normalize(user) == normalize(name)) {
+            names.push(name.to_string());
+        }
+    }
+    names.sort();
+    names
+}
+
 /// Merge the theme selected by `general.theme` below the user's configuration.
 ///
 /// A loaded user theme file is added to `config_paths`, so editing it triggers live reload.
@@ -66,12 +85,8 @@ fn load(
         None => match builtin(name) {
             Some((_, theme)) => theme.to_string(),
             None => {
-                let mut available: Vec<_> = user_themes.iter().map(|path| stem(path)).collect();
-                available.extend(BUILTIN_THEMES.iter().map(|(name, _)| name.to_string()));
-                return Err(format!(
-                    "Unknown theme {name:?}; available themes: {}",
-                    available.join(", ")
-                ));
+                let available = list_from(user_dir).join(", ");
+                return Err(format!("Unknown theme {name:?}; available themes: {available}"));
             },
         },
     };
@@ -201,7 +216,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("mine.toml"), "").unwrap();
         let err = load("missing", Some(dir.path()), &mut Vec::new()).unwrap_err();
-        assert!(err.contains("available themes: mine, "), "{err}");
-        assert!(err.contains(", tokyo-night"), "{err}");
+        assert!(err.contains("available themes: apple-system-colors, "), "{err}");
+        assert!(err.contains(", mine, "), "{err}");
+    }
+
+    #[test]
+    fn list_merges_user_and_builtin_themes() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Dracula.toml"), "").unwrap();
+        fs::write(dir.path().join("mine.toml"), "").unwrap();
+
+        let names = list_from(Some(dir.path()));
+        assert_eq!(names.len(), BUILTIN_THEMES.len() + 1);
+        assert!(names.is_sorted());
+        assert!(names.contains(&"Dracula".into()) && !names.contains(&"dracula".into()));
+        assert!(names.contains(&"mine".into()) && names.contains(&"tokyo-night".into()));
     }
 }

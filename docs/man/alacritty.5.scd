@@ -77,8 +77,9 @@ This section documents the *[general]* table of the configuration file.
 	(_~/.config/alacritty/themes/_ by default) or
 	_%APPDATA%\\alacritty\\themes\\_ on Windows, selected by file name without
 	the _.toml_ extension. A user theme takes precedence over a built-in theme
-	with the same name, and editing it triggers live config reload. An unknown
-	name logs the list of available themes.
+	with the same name, and editing it triggers live config reload. Run
+	_alacritty themes_ to list all available themes; an unknown name also logs
+	that list.
 
 	Example:
 		_~/.config/alacritty/themes/my-theme.toml_ containing a *[colors]* table

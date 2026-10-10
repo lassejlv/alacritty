@@ -236,6 +236,8 @@ pub enum Subcommands {
     #[cfg(unix)]
     Msg(MessageOptions),
     Migrate(MigrateOptions),
+    /// List available color themes.
+    Themes,
 }
 
 /// Send a message to the Alacritty socket.
