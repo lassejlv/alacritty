@@ -2,67 +2,115 @@
     <img width="200" alt="Alacritty Logo" src="assets/icons/compat/alacritty-term%2Bscanlines.png">
 </p>
 
-<h1 align="center">Alacritty - A fast, cross-platform, OpenGL terminal emulator</h1>
+<h1 align="center">Alacritty (lassejlv fork)</h1>
 
 <p align="center">
-  <img alt="Alacritty - A fast, cross-platform, OpenGL terminal emulator"
-       src="assets/screenshots/alacritty-readme.png">
+  A personal fork of <a href="https://github.com/alacritty/alacritty">Alacritty</a>,
+  the fast, cross-platform, OpenGL terminal emulator, with tabs, split panes,
+  color themes and modern terminal protocols.
 </p>
+
+<p align="center">
+  <a href="https://github.com/lassejlv/alacritty/releases/latest">Download</a> ·
+  <a href="#whats-different">What's different</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+<p align="center">
+  <img alt="Alacritty terminal window" src="assets/screenshots/alacritty-readme.png">
+</p>
+
+> [!NOTE]
+> This is an unofficial fork and is not affiliated with or endorsed by the
+> Alacritty project. Please report issues with this fork
+> [here](https://github.com/lassejlv/alacritty/issues), not upstream.
 
 ## About
 
-Alacritty is a modern terminal emulator that comes with sensible defaults, but
-allows for extensive [configuration](#configuration). By integrating with other
-applications, rather than reimplementing their functionality, it manages to
-provide a flexible set of [features](./docs/features/README.md) with high performance.
-The supported platforms currently consist of BSD, Linux, macOS and Windows.
+Alacritty is a modern terminal emulator with sensible defaults, extensive
+configuration and high performance. This fork keeps the upstream core and adds
+features that upstream deliberately leaves out, such as tabs, splits and native
+desktop integration, along with support for newer terminal protocols.
 
-The software is considered to be at a **beta** level of readiness; there are
-a few missing features and bugs to be fixed, but it is already used by many as
-a daily driver.
+It builds for BSD, Linux, macOS and Windows. Most of the native integration
+targets macOS first.
 
-Precompiled binaries are available from the [GitHub releases page](https://github.com/alacritty/alacritty/releases).
+## What's different
 
-Join [`#alacritty`] on libera.chat if you have questions or looking for a quick help.
+### Tabs, panes and windows
 
-[`#alacritty`]: https://web.libera.chat/gamja/?channels=#alacritty
+- Native macOS tabs (<kbd>Cmd</kbd> <kbd>T</kbd>) and separate windows (<kbd>Cmd</kbd> <kbd>N</kbd>).
+- Nested split panes within each tab (<kbd>Cmd</kbd> <kbd>D</kbd> / <kbd>Cmd</kbd> <kbd>Shift</kbd> <kbd>D</kbd>), with draggable dividers and dimmed inactive panes.
+- Maximize and restore the focused pane (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Enter</kbd>).
+- Independent font zoom per pane.
 
-## Features
+### Themes
 
-You can find an overview over the features available in Alacritty [here](./docs/features/README.md).
+- 66 built-in color themes converted from popular Ghostty themes, selected with `general.theme`.
+- User themes in `~/.config/alacritty/themes/`.
+- `alacritty themes` lists every available theme.
 
-## Further information
+### Terminal protocols
 
-- [Announcing Alacritty, a GPU-Accelerated Terminal Emulator](https://jwilm.io/blog/announcing-alacritty/) January 6, 2017
-- [A talk about Alacritty at the Rust Meetup January 2017](https://www.youtube.com/watch?v=qHOdYO3WUTk) January 19, 2017
-- [Alacritty Lands Scrollback, Publishes Benchmarks](https://jwilm.io/blog/alacritty-lands-scrollback/) September 17, 2018
+- [Kitty graphics](docs/protocols/kitty-graphics.md) and [Kitty clipboard](docs/protocols/kitty-clipboard.md).
+- [Shell integration](docs/protocols/shell-integration.md): OSC 133 command tracking and navigation, copying command output, OSC 7 working directory and automatic zsh integration.
+- [Desktop notifications](docs/protocols/notifications.md) through OSC 99 and iTerm2-style OSC 9.
+- [Progress indicators](docs/protocols/progress.md) through OSC 9;4, shown per pane and on the macOS Dock, Windows taskbar and Linux launchers.
+- [Program status](docs/protocols/program-status.md) through OSC 7501, shown in window and tab titles.
+
+### macOS integration
+
+- Native menus and a terminal context menu.
+- Signed, notarized universal builds with automatic updates through Sparkle.
+- Migration of an existing Ghostty config with **Alacritty → Migrate Ghostty Config…**.
+- <kbd>Cmd</kbd> <kbd>A</kbd> selects the whole buffer and <kbd>Cmd</kbd> <kbd>Delete</kbd> clears the current input line.
+
+See [macOS features](docs/features/macos.md) for the full list of shortcuts.
+
+### Embedding
+
+The [`alacritty_ffi`](crates/ffi/README.md) crate exposes the terminal engine
+through a C ABI, a pkg-config package and Python bindings, so you can build your
+own terminal on top of Alacritty. Run `make ffi` to package it.
+
+All upstream features, including vi mode, search, hints and IPC, are still
+available. They are described in [features](docs/features/README.md).
 
 ## Installation
 
-Alacritty can be installed by using various package managers on Linux, BSD,
-macOS and Windows.
+### macOS
 
-Prebuilt binaries for macOS and Windows can also be downloaded from the
-[GitHub releases page](https://github.com/alacritty/alacritty/releases).
+Download `Alacritty-macos-universal.dmg` from the
+[latest release](https://github.com/lassejlv/alacritty/releases/latest). The
+app is a universal Apple Silicon/Intel build and updates itself through
+**Alacritty → Check for Updates…**.
 
-For everyone else, the detailed instructions to install Alacritty can be found
-[here](docs/installation.md).
+### From source
+
+The workspace requires Rust 1.99 or newer:
+
+```sh
+git clone https://github.com/lassejlv/alacritty.git
+cd alacritty
+cargo build --release --locked
+```
+
+On macOS, `make app` builds `Alacritty.app` under `target/release/osx/`.
+
+Platform dependencies, terminfo, desktop entries, manpages and shell
+completions are covered in the [installation guide](docs/installation.md).
 
 ### Requirements
 
-- At least OpenGL ES 2.0
-- [Windows] ConPTY support (Windows 10 version 1809 or higher)
+- OpenGL ES 2.0 or newer.
+- On Windows, ConPTY support (Windows 10 version 1809 or newer).
 
 ## Configuration
 
-You can find the documentation for Alacritty's configuration in `man 5
-alacritty`, or by looking at [the website] if you do not have the manpages
-installed.
-
-[the website]: https://alacritty.org/config-alacritty.html
-
-Alacritty doesn't create the config file for you, but it looks for one in the
-following locations:
+Alacritty doesn't create a config file for you. It looks for one in these
+locations:
 
 1. `$XDG_CONFIG_HOME/alacritty/alacritty.toml`
 2. `$XDG_CONFIG_HOME/alacritty.toml`
@@ -70,50 +118,51 @@ following locations:
 4. `$HOME/.alacritty.toml`
 5. `/etc/alacritty/alacritty.toml`
 
-On Windows, the config file will be looked for in:
+On Windows, it looks in `%APPDATA%\alacritty\alacritty.toml`.
 
-* `%APPDATA%\alacritty\alacritty.toml`
+A minimal config that picks a theme:
 
-## Contributing
+```toml
+[general]
+theme = "apple-system-colors"
+```
 
-A guideline about contributing to Alacritty can be found in the
-[`CONTRIBUTING.md`](CONTRIBUTING.md) file.
-
-## FAQ
-
-**_Is it really the fastest terminal emulator?_**
-
-Benchmarking terminal emulators is complicated. Alacritty uses
-[vtebench](https://github.com/alacritty/vtebench) to quantify terminal emulator
-throughput and manages to consistently score better than the competition using
-it. If you have found an example where this is not the case, please report a
-bug.
-
-Other aspects like latency or framerate and frame consistency are more difficult
-to quantify. Some terminal emulators also intentionally slow down to save
-resources, which might be preferred by some users.
-
-If you have doubts about Alacritty's performance or usability, the best way to
-quantify terminal emulators is always to test them with **your** specific
-usecases.
-
-**_Why isn't feature X implemented?_**
-
-Alacritty has many great features, but not every feature from every other
-terminal. This could be for a number of reasons, but sometimes it's just not a
-good fit for Alacritty. This means you won't find things like tabs or splits
-(which are best left to a window manager or [terminal multiplexer][tmux]) nor
-niceties like a GUI config editor.
-
-[tmux]: https://github.com/tmux/tmux
-
-## License
-
-Alacritty is released under the [Apache License, Version 2.0].
-
-[Apache License, Version 2.0]: https://github.com/alacritty/alacritty/blob/master/LICENSE-APACHE
+All options are documented in `man 5 alacritty`
+([source](docs/man/alacritty.5.scd)). The
+[upstream website](https://alacritty.org/config-alacritty.html) covers the
+shared options, but it doesn't include this fork's additions.
 
 ## Development
 
-See the [workspace architecture](docs/architecture.md) and
-[development guide](docs/development.md) for crate ownership and local checks.
+- [Workspace architecture](docs/architecture.md) explains the crate layout.
+- The [development guide](docs/development.md) covers local checks.
+- [Releases](docs/releases.md) describes the signed macOS release pipeline.
+
+```sh
+cargo test --locked --workspace
+cargo clippy --workspace --all-targets
+```
+
+## FAQ
+
+**_Why a fork?_**
+
+Upstream Alacritty intentionally leaves out tabs, splits and similar
+features, and recommends a window manager or a multiplexer such as
+[tmux](https://github.com/tmux/tmux) instead. This fork adds them for people who
+want them built in, without changing the fast core.
+
+**_Is it really the fastest terminal emulator?_**
+
+Benchmarking terminal emulators is complicated. Upstream Alacritty uses
+[vtebench](https://github.com/alacritty/vtebench) to measure throughput and
+consistently scores well. Latency, framerate and frame consistency are harder
+to quantify. The best test is always your own workload.
+
+## Credits and license
+
+All credit for Alacritty goes to its
+[authors and contributors](https://github.com/alacritty/alacritty/graphs/contributors).
+This fork is released under the same terms as upstream: the
+[Apache License, Version 2.0](LICENSE-APACHE). The config crates and the
+vendored `vte` parser are dual-licensed under the [MIT License](LICENSE-MIT).
