@@ -366,7 +366,7 @@ impl ParsedOptions {
         for option in options {
             let parsed = match toml::from_str(option) {
                 // Expand themes here, since overrides are applied to an already parsed config.
-                Ok(parsed) => theme::apply(parsed),
+                Ok(parsed) => theme::apply(parsed, &mut Vec::new()),
                 Err(err) => {
                     eprintln!("Ignoring invalid CLI option '{option}': {err}");
                     continue;

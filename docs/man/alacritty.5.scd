@@ -49,13 +49,23 @@ This section documents the *[general]* table of the configuration file.
 
 *theme* = _"<string>"_ | _"None"_
 
-	Built-in color theme. Its colors are applied first, so imports and the
+	Color theme. Its colors are applied first, so imports and the
 	*[colors]* table still override individual colors. Names ignore case and
 	punctuation, so _"TokyoNight Storm"_ selects _"tokyo-night-storm"_.
 
-	Available themes: _"tokyo-night"_, _"tokyo-night-day"_,
-	_"tokyo-night-moon"_, _"tokyo-night-night"_, _"tokyo-night-storm"_. An
-	unknown name logs the list of available themes.
+	Built-in themes: _"tokyo-night"_, _"tokyo-night-day"_,
+	_"tokyo-night-moon"_, _"tokyo-night-night"_, _"tokyo-night-storm"_.
+
+	User themes are TOML config files in _$XDG_CONFIG_HOME/alacritty/themes/_
+	(_~/.config/alacritty/themes/_ by default) or
+	_%APPDATA%\\alacritty\\themes\\_ on Windows, selected by file name without
+	the _.toml_ extension. A user theme takes precedence over a built-in theme
+	with the same name, and editing it triggers live config reload. An unknown
+	name logs the list of available themes.
+
+	Example:
+		_~/.config/alacritty/themes/my-theme.toml_ containing a *[colors]* table
+		is selected with _theme = "my-theme"_.
 
 	Default: _"None"_
 
