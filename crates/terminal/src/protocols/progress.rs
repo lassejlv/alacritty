@@ -1,5 +1,15 @@
 //! ConEmu OSC 9;4 progress, independent of OSC 7501 program records.
 
+/// Idle time after which applications are expected to have refreshed visible progress.
+pub const PROGRESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Whether an OSC 9 body is a ConEmu command (sub-ID 1 to 12) rather than notification text.
+pub fn is_conemu_command(body: &[u8]) -> bool {
+    let id_len = body.iter().take_while(|b| b.is_ascii_digit()).count();
+    let id = std::str::from_utf8(&body[..id_len]).ok().and_then(|id| id.parse::<u8>().ok());
+    matches!(id, Some(1..=12)) && matches!(body.get(id_len), None | Some(b';'))
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ProgressState {
     #[default]

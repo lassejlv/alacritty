@@ -71,6 +71,7 @@ pub enum EventType {
     GraphicsAnimation,
     NotificationFeedback(crate::platform::notifications::Feedback),
     NotificationExpiry,
+    ProgressExpiry,
     SearchNext,
     #[cfg(unix)]
     Shutdown,

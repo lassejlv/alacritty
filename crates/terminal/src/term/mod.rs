@@ -861,6 +861,17 @@ impl<T> Term<T> {
         self.progress
     }
 
+    /// Hide OSC 9;4 progress, notifying listeners when it was visible.
+    pub fn clear_progress(&mut self)
+    where
+        T: EventListener,
+    {
+        if self.progress != Default::default() {
+            self.progress = Default::default();
+            self.event_proxy.send_event(Event::ProgressChanged);
+        }
+    }
+
     pub fn working_directory(
         &self,
     ) -> Option<&crate::protocols::working_directory::WorkingDirectory> {
@@ -2383,10 +2394,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.program_status.finish() {
             self.event_proxy.send_event(Event::ProgramStatusChanged);
         }
-        if self.progress != Default::default() {
-            self.progress = Default::default();
-            self.event_proxy.send_event(Event::ProgressChanged);
-        }
+        self.clear_progress();
     }
 
     fn working_directory(&mut self, body: &[u8]) {
@@ -2405,7 +2413,14 @@ impl<T: EventListener> Handler for Term<T> {
     }
 
     fn progress(&mut self, body: &[u8]) {
-        if self.progress.update(body) {
+        // ConEmu commands start with a numeric sub-ID; other OSC 9 text is an iTerm2-style
+        // notification, delivered as an OSC 99 title.
+        if !crate::protocols::progress::is_conemu_command(body) {
+            let mut notification = Vec::with_capacity(body.len() + 1);
+            notification.push(b';');
+            notification.extend_from_slice(body);
+            self.desktop_notification(&notification, false);
+        } else if self.progress.update(body) {
             self.event_proxy.send_event(Event::ProgressChanged);
         }
     }

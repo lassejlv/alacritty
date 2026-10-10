@@ -23,6 +23,8 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 - OSC 7 working-directory reports and automatic zsh shell integration
 - OSC 99 native desktop notifications with pane activation, replies, updates, and expiry
 - OSC 9;4 per-pane progress indicators
+- OSC 9;4 progress on the macOS Dock icon and Windows taskbar buttons
+- iTerm2-style OSC 9 desktop notifications
 
 - Maximize the focused pane and restore its split layout with Command/Control-Shift-Enter
 

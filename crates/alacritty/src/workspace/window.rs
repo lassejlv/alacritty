@@ -103,6 +103,30 @@ impl WindowContext {
         }
     }
 
+    /// Hide progress that applications stop refreshing, matching Ghostty's keep-alive timeout.
+    fn schedule_progress_expiry(&self, pane: PaneId, scheduler: &mut Scheduler) {
+        use alacritty_terminal::protocols::progress::{PROGRESS_TIMEOUT, ProgressState};
+        let timer = crate::app::scheduler::TimerId::for_pane(
+            crate::app::scheduler::Topic::ProgressExpiry,
+            self.id(),
+            pane,
+        );
+        scheduler.unschedule(timer);
+        if self.pane.session.terminal.lock().progress().state != ProgressState::Hidden {
+            let event =
+                Event::new(crate::app::EventType::ProgressExpiry, self.id()).with_pane(pane);
+            scheduler.schedule(event, PROGRESS_TIMEOUT, false, timer);
+        }
+    }
+
+    /// Combined OSC 9;4 progress of every pane in this window.
+    pub fn progress(&self) -> alacritty_terminal::protocols::progress::Progress {
+        let panes = std::iter::once(&self.pane).chain(self.inactive.iter().map(|(pane, _)| pane));
+        crate::platform::progress::combine(
+            panes.map(|pane| pane.session.terminal.lock().progress()),
+        )
+    }
+
     /// Create initial window context that does bootstrapping the graphics API we're going to use.
     pub fn initial(
         event_loop: &ActiveEventLoop,
@@ -693,6 +717,11 @@ impl WindowContext {
                     crate::app::EventType::NotificationExpiry => {
                         Some(self.pane.notifications.expire(Instant::now()))
                     },
+                    crate::app::EventType::ProgressExpiry => {
+                        self.pane.session.terminal.lock().clear_progress();
+                        self.load_pane(active);
+                        continue;
+                    },
                     crate::app::EventType::NotificationFeedback(Feedback::Alive {
                         query,
                         serials,
@@ -775,6 +804,9 @@ impl WindowContext {
                                 self.load_pane(active);
                             }
                             continue;
+                        },
+                        TerminalEvent::ProgressChanged => {
+                            self.schedule_progress_expiry(id, scheduler)
                         },
                         TerminalEvent::MouseCursorDirty if id != active => {
                             self.load_pane(active);

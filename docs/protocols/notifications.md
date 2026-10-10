@@ -8,6 +8,15 @@ printf '\033]99;i=build:d=0:a=focus,report;Build complete\033\\'
 printf '\033]99;i=build:p=body;All tests passed\033\\'
 ```
 
+iTerm2-style `OSC 9` notifications are also supported. Their text becomes the
+notification title, using the same delivery, focus and configuration as OSC 99.
+OSC 9 bodies starting with a ConEmu sub-ID from 1 to 12, such as `9;4;…`
+progress, are not notifications.
+
+```sh
+printf '\033]9;Build complete\033\\'
+```
+
 Clicking focuses the originating window, tab and pane. `a=report` also sends an
 activation reply to that pane's PTY. `a=-focus` disables focus changes. Clicking
 old, replaced notifications cannot activate a newer notification. Exiting the

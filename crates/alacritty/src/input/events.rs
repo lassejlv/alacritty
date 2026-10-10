@@ -150,6 +150,7 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                 EventType::Message(_)
                 | EventType::NotificationFeedback(_)
                 | EventType::NotificationExpiry
+                | EventType::ProgressExpiry
                 | EventType::ConfigReload(_)
                 | EventType::Pane(_)
                 | EventType::CreateWindow(_)

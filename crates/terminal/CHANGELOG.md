@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - OSC 7 file-URI directory state with local-host validation
 - OSC 133 semantic markers which follow grid reflow and scrollback, plus command status/output APIs
 - OSC 9;4 progress state and change events
+- `Term::clear_progress` and `PROGRESS_TIMEOUT` for hiding stale OSC 9;4 progress
+- OSC 9 text without a ConEmu sub-ID is emitted as a `DesktopNotification` title
 - OSC 99 bounded notification assembly, lifecycle handling, and host delivery events
 
 - OSC 7501 program status records, feature detection, and lifecycle handling

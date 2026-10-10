@@ -5,6 +5,12 @@ A thin bar appears at the top of the originating pane. Normal progress uses the
 theme's blue, errors use red, and paused work uses yellow. Indeterminate progress
 animates. Inactive-pane dimming applies to the indicator too.
 
+Progress is also shown natively: on macOS as a bar over the Dock icon, combining
+all windows, and on Windows on each window's taskbar button. When several panes
+report progress, errors take precedence, then paused, normal and indeterminate
+work; panes in the same state show the least complete one. Other platforms only
+show the in-pane bar.
+
 ```sh
 printf '\033]9;4;1;40\033\\'  # 40 percent
 printf '\033]9;4;2\033\\'     # Error, retaining 40 percent
@@ -21,10 +27,14 @@ Invalid states and values leave the previous state unchanged.
 
 Progress belongs to the pane and is separate from OSC 7501 records. Reporting or
 clearing OSC 9;4 does not overwrite a program's OSC 7501 status. A shell prompt
-marker, PTY exit or full terminal reset clears progress. Applications should send
-the hide sequence on completion; there is no automatic inactivity timeout.
+marker, PTY exit or full terminal reset clears progress. Like Ghostty, progress is
+also hidden after 15 seconds without an OSC 9;4 update, so applications should
+resend their state as a keep-alive (at least once a second is recommended) and
+send the hide sequence on completion.
 
-BEL and ST are accepted. Other ConEmu commands are not executed.
+BEL and ST are accepted. Other ConEmu commands (sub-IDs 1 to 12) are ignored. OSC 9
+text without such a sub-ID is an iTerm2-style desktop notification; see
+[notifications](notifications.md).
 
 Run `cargo test --locked -p alacritty_terminal --test shell_protocols` for parser
 and state-transition coverage.

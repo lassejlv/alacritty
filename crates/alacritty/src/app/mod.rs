@@ -5,6 +5,7 @@ use glutin::config::GetGlConfig;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::error::Error;
+use std::mem;
 use std::rc::Rc;
 
 use ahash::RandomState;
@@ -59,6 +60,8 @@ pub struct Processor {
     global_ipc_options: ParsedOptions,
     cli_options: CliOptions,
     config: Rc<UiConfig>,
+    system_progress: crate::platform::progress::SystemProgress,
+    progress_dirty: bool,
     #[cfg(target_os = "macos")]
     updater: Option<crate::platform::macos::updater::Updater>,
     #[cfg(target_os = "macos")]
@@ -106,6 +109,8 @@ impl Processor {
             #[cfg(unix)]
             global_ipc_options: Default::default(),
             config_monitor,
+            system_progress: Default::default(),
+            progress_dirty: false,
             #[cfg(target_os = "macos")]
             updater: None,
             #[cfg(target_os = "macos")]
@@ -314,6 +319,13 @@ impl ApplicationHandler<Event> for Processor {
         if self.config.debug.print_events {
             info!(target: LOG_TARGET_WINIT, "{event:?}");
         }
+
+        // Pane progress, exits and layout changes can all change native progress.
+        self.progress_dirty |= matches!(
+            event.payload,
+            EventType::Terminal(TerminalEvent::ProgressChanged | TerminalEvent::Exit)
+                | EventType::Pane(_)
+        );
 
         // Handle events which don't mandate the WindowId.
         match (event.payload, event.window_id.as_ref()) {
@@ -569,6 +581,15 @@ impl ApplicationHandler<Event> for Processor {
                 &mut self.scheduler,
                 WinitEvent::AboutToWait,
             );
+        }
+
+        if mem::take(&mut self.progress_dirty) {
+            let windows: Vec<_> = self
+                .windows
+                .values()
+                .map(|window| (window.display.window.raw_window_handle(), window.progress()))
+                .collect();
+            self.system_progress.update(&windows);
         }
 
         // Update the scheduler after event processing to ensure

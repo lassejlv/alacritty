@@ -212,3 +212,47 @@ fn parser_preserves_notification_payloads_and_orders_capability_replies() {
     assert!(replies_seen[0].starts_with("\x1b]99;i=mux:p=?;"));
     assert!(replies_seen[1].starts_with("\x1b[?"));
 }
+
+#[test]
+fn osc_9_text_is_a_notification_and_conemu_commands_are_not() {
+    use alacritty_terminal::Term;
+    use alacritty_terminal::event::{Event, EventListener};
+    use alacritty_terminal::protocols::progress::ProgressState;
+    use alacritty_terminal::term::Config;
+    use alacritty_terminal::term::test::TermSize;
+    use alacritty_terminal::vte::ansi::Processor;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    #[derive(Clone, Default)]
+    struct Listener(Rc<RefCell<Vec<Event>>>);
+    impl EventListener for Listener {
+        fn send_event(&self, event: Event) {
+            self.0.borrow_mut().push(event);
+        }
+    }
+    let listener = Listener::default();
+    let mut term = Term::new(Config::default(), &TermSize::new(20, 2), listener.clone());
+    let mut parser: Processor = Processor::new();
+    parser.advance(
+        &mut term,
+        "\x1b]9;Build done; 3 \
+         warnings\x07\x1b]9;4;1;50\x1b\\\x1b]9;2;dialog\x07\x1b]9;12\x07\x1b]9;12 \
+         files\x07\x1b]9;13;x\x07\x1b]9;héllo\x1b\\"
+            .as_bytes(),
+    );
+    assert_eq!(term.progress().state, ProgressState::Normal);
+
+    let mut host = Notifications::default();
+    let mut titles = vec![];
+    for event in listener.0.take() {
+        if let Event::DesktopNotification { body, truncated } = event {
+            titles.push(
+                shown(&host.apply(&body, truncated, Instant::now(), false, true, true))
+                    .title
+                    .clone(),
+            );
+        }
+    }
+    assert_eq!(titles, ["Build done; 3 warnings", "12 files", "13;x", "héllo"]);
+}

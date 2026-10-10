@@ -2,6 +2,7 @@
 pub mod macos;
 pub mod notifications;
 pub mod process;
+pub mod progress;
 #[cfg(unix)]
 pub mod unix;
 pub mod window;

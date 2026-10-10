@@ -40,6 +40,7 @@ pub enum Topic {
     Frame,
     GraphicsAnimation,
     NotificationExpiry,
+    ProgressExpiry,
 }
 
 /// Event scheduled to be emitted at a specific time.
