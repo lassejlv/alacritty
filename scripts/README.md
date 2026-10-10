@@ -33,3 +33,12 @@ Run these commands from the repository root. Protocol smoke checks live in
 Run `python3 scripts/smoke/shell-integration.py` to test the bundled zsh hooks in
 a real PTY with isolated startup files. This checks command boundaries, exit
 status and encoded working-directory reports without changing your shell config.
+
+## Themes
+
+Built-in themes are the `crates/alacritty/themes/*.toml` files; the file name is
+the `general.theme` value. Convert Ghostty themes into that directory with:
+
+```sh
+scripts/themes/ghostty-to-toml.py crates/alacritty/themes path/to/ghostty/themes/*
+```

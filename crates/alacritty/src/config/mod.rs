@@ -21,6 +21,7 @@ pub mod scrolling;
 pub mod selection;
 pub mod serde_utils;
 pub mod terminal;
+pub mod theme;
 pub mod ui_config;
 pub mod window;
 
@@ -209,6 +210,7 @@ fn load_from(path: &Path) -> Result<UiConfig> {
 fn read_config(path: &Path) -> Result<UiConfig> {
     let mut config_paths = Vec::new();
     let config_value = parse_config(path, &mut config_paths, IMPORT_RECURSION_LIMIT)?;
+    let config_value = theme::apply(config_value);
 
     // Deserialize to concrete type.
     let mut config = UiConfig::deserialize(config_value)?;

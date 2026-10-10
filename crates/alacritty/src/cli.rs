@@ -12,9 +12,9 @@ use toml::Value;
 
 use alacritty_session::pty::Options as PtyOptions;
 
-use crate::config::UiConfig;
 use crate::config::ui_config::Program;
 use crate::config::window::{Class, Identity};
+use crate::config::{UiConfig, theme};
 use crate::logging::LOG_TARGET_IPC_CONFIG;
 
 /// CLI options for the main Alacritty executable.
@@ -365,7 +365,8 @@ impl ParsedOptions {
 
         for option in options {
             let parsed = match toml::from_str(option) {
-                Ok(parsed) => parsed,
+                // Expand themes here, since overrides are applied to an already parsed config.
+                Ok(parsed) => theme::apply(parsed),
                 Err(err) => {
                     eprintln!("Ignoring invalid CLI option '{option}': {err}");
                     continue;
@@ -439,6 +440,8 @@ mod tests {
     use clap_complete::Shell;
     use toml::Table;
 
+    use crate::presentation::color::Rgb;
+
     #[test]
     fn dynamic_title_ignoring_options_by_default() {
         let mut config = UiConfig::default();
@@ -457,6 +460,19 @@ mod tests {
         Options::default().override_config(&mut config);
 
         assert!(config.window.dynamic_title);
+    }
+
+    #[test]
+    fn theme_option_overrides_colors() {
+        let mut config = UiConfig::default();
+        config.colors.primary.foreground = Rgb::new(1, 2, 3);
+
+        ParsedOptions::from_options(&[r#"general.theme="tokyo-night-storm""#.into()])
+            .override_config(&mut config);
+
+        assert_eq!(config.general.theme.as_deref(), Some("tokyo-night-storm"));
+        assert_eq!(config.colors.primary.background, Rgb::new(0x24, 0x28, 0x3b));
+        assert_eq!(config.colors.primary.foreground, Rgb::new(0xc0, 0xca, 0xf5));
     }
 
     #[test]

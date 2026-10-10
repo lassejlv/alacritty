@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use toml::{Table, Value};
 use toml_edit::{DocumentMut, Item, TableLike};
 
+use crate::config::theme;
+
 const MAX_FILE_SIZE: u64 = 2 * 1024 * 1024;
 const MAX_FILES: usize = 64;
 const ANSI: [&str; 8] = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
@@ -239,6 +241,9 @@ pub fn convert(source: &Path, theme_dirs: &[PathBuf], dark: bool) -> Result<Migr
                 });
                 theme_entries.extend(entries);
                 entries = theme_entries;
+            } else if let Some(builtin) = theme::find(name) {
+                set(&mut result.settings, &["general", "theme"], builtin.into());
+                result.mapped += 1;
             } else {
                 result.notes.push(format!(
                     "{}: theme ‘{name}’ could not be found; its colors were not imported.",
@@ -704,6 +709,16 @@ mod tests {
         assert_eq!(converted.settings["colors"]["primary"]["background"].as_str(), Some("#444444"));
         assert_eq!(converted.settings["colors"]["normal"]["black"].as_str(), Some("#222222"));
         assert_eq!(converted.settings["font"]["size"].as_float(), Some(14.));
+    }
+    #[test]
+    fn missing_theme_falls_back_to_builtin_theme() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("config");
+        fs::write(&source, "theme = TokyoNight Storm\nbackground = 333333\n").unwrap();
+        let converted = convert(&source, &[], true).unwrap();
+        assert!(converted.notes.is_empty());
+        assert_eq!(converted.settings["general"]["theme"].as_str(), Some("tokyo-night-storm"));
+        assert_eq!(converted.settings["colors"]["primary"]["background"].as_str(), Some("#333333"));
     }
     #[test]
     fn backup_merge_and_preview_race() {

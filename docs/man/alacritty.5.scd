@@ -47,6 +47,18 @@ This section documents the *[general]* table of the configuration file.
 	_"alacritty-theme/themes/gruvbox_dark.toml"_,++
 ]
 
+*theme* = _"<string>"_ | _"None"_
+
+	Built-in color theme. Its colors are applied first, so imports and the
+	*[colors]* table still override individual colors. Names ignore case and
+	punctuation, so _"TokyoNight Storm"_ selects _"tokyo-night-storm"_.
+
+	Available themes: _"tokyo-night"_, _"tokyo-night-day"_,
+	_"tokyo-night-moon"_, _"tokyo-night-night"_, _"tokyo-night-storm"_. An
+	unknown name logs the list of available themes.
+
+	Default: _"None"_
+
 *working_directory* = _"<string>"_ | _"None"_
 
 	Directory the shell is started in. When this is unset, or _"None"_, the

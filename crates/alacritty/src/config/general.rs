@@ -18,6 +18,9 @@ pub struct General {
     /// [`toml::Value`], but still present to prevent unused field warnings.
     pub import: Vec<String>,
 
+    /// Built-in color theme, applied below all other color settings.
+    pub theme: Option<String>,
+
     /// Shell startup directory.
     pub working_directory: Option<PathBuf>,
 
@@ -36,6 +39,7 @@ impl Default for General {
             ipc_socket: true,
             working_directory: Default::default(),
             import: Default::default(),
+            theme: Default::default(),
         }
     }
 }
