@@ -106,6 +106,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "alacritty_ffi"
+version = "0.1.0"
+dependencies = [
+ "alacritty_session",
+ "alacritty_terminal",
+ "bitflags 2.9.4",
+ "log",
+ "parking_lot",
+]
+
+[[package]]
 name = "alacritty_renderer"
 version = "0.1.0"
 dependencies = [

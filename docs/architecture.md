@@ -1,6 +1,6 @@
 # Workspace architecture
 
-The root `Cargo.toml` defines six packages, shared dependency versions, and the
+The root `Cargo.toml` defines seven packages, shared dependency versions, and the
 Rust edition and minimum version. `cargo run` builds the `alacritty` application
 by default. Use `--workspace` to check every package and its tests.
 
@@ -11,6 +11,7 @@ crates/session/       PTY processes, worker loop, synchronization and notificati
 crates/renderer/      OpenGL rendering, glyph cache, drawing settings and shaders
 crates/config/        Shared serialization and configuration replacement helpers
 crates/config-derive/ Configuration procedural macros
+crates/ffi/           Embeddable engine with a C ABI for custom terminals
 assets/               Icons and screenshots
 packaging/            macOS bundle, Windows installer, Linux desktop files,
                       shell completions and terminfo
@@ -36,6 +37,15 @@ The PTY worker retains the existing detached-thread cleanup behavior.
 It owns GL resources, context helpers, fonts and shaders. It depends on terminal
 value types and the configuration helper crates for serialized drawing settings;
 it never imports the desktop application or the session crate.
+
+`alacritty_ffi` combines the terminal and session crates into an embeddable engine
+with a C ABI declared in `crates/ffi/include/alacritty.h`. It shares the
+keyboard and mouse encoders in `alacritty_terminal::input` and the link
+detection in `alacritty_terminal::term::hints` with the desktop application,
+and services protocol requests that the application handles on its UI thread:
+color and size queries, OSC 52 and Kitty clipboard permissions, notifications
+and progress timeouts. Hosts supply rendering, fonts, windows and clipboard
+callbacks. It never imports the desktop application or the renderer.
 
 ## Application modules
 

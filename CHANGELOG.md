@@ -38,6 +38,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 - Native macOS terminal context menu with clipboard, selection, search, and pane commands
 
 - OSC 7501 program status, shown in dynamic window and tab titles
+- `alacritty_ffi` crate with a C ABI, pkg-config package (`make ffi`) and Python binding for building custom terminals on the Alacritty engine
 
 ### Changed
 

@@ -33,6 +33,9 @@ all: help
 help: ## Print this help message
 	@grep -E '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
+ffi: ## Package the alacritty_ffi library, header and pkg-config file
+	python3 scripts/release/ffi-package.py --out $(RELEASE_DIR)/alacritty_ffi
+
 binary: $(TARGET)-native ## Build a release binary
 binary-universal: $(TARGET)-universal ## Build a universal release binary
 $(TARGET)-native:
@@ -83,7 +86,7 @@ install-universal: $(INSTALL)-native ## Mount universal disk image
 $(INSTALL)-%: $(DMG_NAME)-%
 	@open $(DMG_DIR)/$(DMG_NAME)
 
-.PHONY: app binary clean dmg install $(TARGET) $(TARGET)-universal
+.PHONY: app binary clean dmg ffi install $(TARGET) $(TARGET)-universal
 
 clean: ## Remove all build artifacts
 	@cargo clean

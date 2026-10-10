@@ -8,6 +8,7 @@ members = [
     "crates/renderer",
     "crates/config",
     "crates/config-derive",
+    "crates/ffi",
 ]
 default-members = ["crates/alacritty"]
 resolver = "3"

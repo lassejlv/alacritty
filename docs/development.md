@@ -21,7 +21,7 @@ module and integration tests in the owning package's `tests/` directory.
 
 Terminal recordings live in `crates/terminal/tests/fixtures/`; register new ones
 in `crates/terminal/tests/reference.rs`. Protocol smoke instructions are under
-[protocols/](protocols/). Native clipboard tests use private pasteboards.
+[protocols/](protocols/). The embeddable engine is documented in [embedding/](embedding/). Native clipboard tests use private pasteboards.
 
 `make app` and `make app-universal` read the templates in `packaging/macos/` and
 write bundles under `target/release/osx/`. Output paths and release asset names

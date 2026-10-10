@@ -7,7 +7,7 @@ This Rust 2024 workspace requires Rust 1.99 or newer and pins 1.99.0 in `rust-to
 - `crates/alacritty/`: desktop application, commands, input, pane layout and native OS integration.
 - `crates/terminal/`: terminal state, graphics and protocols; `crates/session/`: PTY processes and worker I/O.
 - `crates/renderer/`: OpenGL drawing, glyphs and shaders. `crates/config/` and `crates/config-derive/`: configuration helpers and macros.
-- `assets/`: icons and screenshots. `packaging/`: app templates, installers, completions and terminfo. `docs/` includes architecture, development, features, protocols and manpages.
+- `assets/`: icons and screenshots. `packaging/`: app templates, installers, completions and terminfo. `docs/` includes architecture, development, embedding (the FFI engine, including a guide for agents), features, protocols and manpages.
 - `vendor/vte/`: patched parser; consult `ALACRITTY-PATCH.md` before changing it.
 - `scripts/release/`: packaging and updates; `scripts/smoke/` and `scripts/diagnostics/`: local checks.
 
