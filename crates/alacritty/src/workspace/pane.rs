@@ -3,8 +3,6 @@
 use std::error::Error;
 use std::time::Instant;
 
-#[cfg(all(feature = "x11", not(any(target_os = "macos", windows))))]
-use glutin::platform::x11::X11GlConfigExt;
 use log::info;
 use winit::event_loop::EventLoopProxy;
 use winit::window::WindowId;

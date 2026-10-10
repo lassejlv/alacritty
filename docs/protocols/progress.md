@@ -6,10 +6,14 @@ theme's blue, errors use red, and paused work uses yellow. Indeterminate progres
 animates. Inactive-pane dimming applies to the indicator too.
 
 Progress is also shown natively: on macOS as a bar over the Dock icon, combining
-all windows, and on Windows on each window's taskbar button. When several panes
-report progress, errors take precedence, then paused, normal and indeterminate
-work; panes in the same state show the least complete one. Other platforms only
-show the in-pane bar.
+all windows, and on Windows on each window's taskbar button. On Linux/BSD,
+app-wide progress is sent through the Unity LauncherEntry D-Bus API for the
+_Alacritty.desktop_ entry, which docks and task managers such as KDE Plasma and
+Dash to Dock display. Launchers have no error color or indeterminate animation,
+so errors mark the launcher entry urgent and indeterminate progress is not shown
+there. When several panes report progress, errors take precedence, then paused,
+normal and indeterminate work; panes in the same state show the least complete
+one.
 
 ```sh
 printf '\033]9;4;1;40\033\\'  # 40 percent

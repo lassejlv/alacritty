@@ -24,6 +24,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 - OSC 99 native desktop notifications with pane activation, replies, updates, and expiry
 - OSC 9;4 per-pane progress indicators
 - OSC 9;4 progress on the macOS Dock icon and Windows taskbar buttons
+- OSC 9;4 progress on Linux/BSD launchers through the Unity LauncherEntry D-Bus API
 - iTerm2-style OSC 9 desktop notifications
 
 - Maximize the focused pane and restore its split layout with Command/Control-Shift-Enter

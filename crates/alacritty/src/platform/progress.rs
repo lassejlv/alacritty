@@ -1,7 +1,7 @@
 //! Native progress indicators mirroring OSC 9;4 pane progress.
 //!
 //! macOS draws one bar on the Dock icon for the whole app, Windows shows progress on each
-//! window's taskbar button, and other platforms have no native indicator.
+//! window's taskbar button, and Linux/BSD report app-wide progress to the desktop launcher.
 
 use std::cmp::Ordering;
 
@@ -40,16 +40,19 @@ pub struct SystemProgress {
     dock: dock::Dock,
     #[cfg(windows)]
     taskbar: taskbar::Taskbar,
+    #[cfg(not(any(target_os = "macos", windows)))]
+    launcher: launcher::Launcher,
 }
 
 impl SystemProgress {
     /// Show each window's combined pane progress.
-    #[cfg_attr(not(any(target_os = "macos", windows)), allow(unused_variables))]
     pub fn update(&mut self, windows: &[(RawWindowHandle, Progress)]) {
         #[cfg(target_os = "macos")]
         self.dock.show(combine(windows.iter().map(|(_, progress)| *progress)));
         #[cfg(windows)]
         self.taskbar.show(windows);
+        #[cfg(not(any(target_os = "macos", windows)))]
+        self.launcher.show(combine(windows.iter().map(|(_, progress)| *progress)));
     }
 }
 
@@ -228,6 +231,96 @@ mod taskbar {
     }
 }
 
+#[cfg(not(any(target_os = "macos", windows)))]
+mod launcher {
+    use std::collections::HashMap;
+    use std::sync::mpsc::{self, Receiver, Sender};
+    use std::thread;
+
+    use alacritty_terminal::protocols::progress::{Progress, ProgressState};
+    use futures_lite::future;
+    use log::warn;
+    use zbus::names::BusName;
+    use zbus::zvariant::Value;
+
+    /// Desktop entry the launcher uses to find Alacritty's icon.
+    const APP_URI: &str = "application://Alacritty.desktop";
+    const PATH: &str = "/com/canonical/unity/launcherentry/alacritty";
+
+    /// App-wide progress reported through the Unity LauncherEntry D-Bus API, which docks and
+    /// task managers such as KDE Plasma and Dash to Dock display.
+    #[derive(Default)]
+    pub struct Launcher {
+        sender: Option<Sender<Progress>>,
+        failed: bool,
+        shown: Progress,
+    }
+
+    impl Launcher {
+        pub fn show(&mut self, progress: Progress) {
+            if progress == self.shown || self.failed {
+                return;
+            }
+            self.shown = progress;
+
+            if self.sender.is_none() {
+                let (sender, receiver) = mpsc::channel();
+                let spawned = thread::Builder::new()
+                    .name("launcher progress".into())
+                    .spawn(move || report(receiver));
+                if let Err(err) = spawned {
+                    warn!("Launcher progress is unavailable: {err}");
+                    self.failed = true;
+                    return;
+                }
+                self.sender = Some(sender);
+            }
+
+            // The worker only stops when the session bus is unavailable.
+            if self.sender.as_ref().is_some_and(|sender| sender.send(progress).is_err()) {
+                self.failed = true;
+            }
+        }
+    }
+
+    /// Emit launcher updates, coalescing queued changes into the latest one.
+    fn report(receiver: Receiver<Progress>) {
+        let result: zbus::Result<()> = future::block_on(async {
+            let connection = zbus::Connection::session().await?;
+            while let Ok(mut progress) = receiver.recv() {
+                while let Ok(latest) = receiver.try_recv() {
+                    progress = latest;
+                }
+                connection
+                    .emit_signal(
+                        None::<BusName<'_>>,
+                        PATH,
+                        "com.canonical.Unity.LauncherEntry",
+                        "Update",
+                        &(APP_URI, properties(progress)),
+                    )
+                    .await?;
+            }
+            Ok(())
+        });
+        if let Err(err) = result {
+            warn!("Launcher progress is unavailable: {err}");
+        }
+    }
+
+    /// Launcher properties; errors mark the entry urgent, since launchers have no error color.
+    pub(super) fn properties(progress: Progress) -> HashMap<&'static str, Value<'static>> {
+        // Launchers cannot animate indeterminate progress, so only determinate work is shown.
+        let visible =
+            !matches!(progress.state, ProgressState::Hidden | ProgressState::Indeterminate);
+        HashMap::from([
+            ("progress-visible", Value::Bool(visible)),
+            ("progress", Value::F64(f64::from(progress.percent) / 100.)),
+            ("urgent", Value::Bool(progress.state == ProgressState::Error)),
+        ])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,5 +349,20 @@ mod tests {
             combine([progress(ProgressState::Paused, 20), progress(ProgressState::Normal, 5)]),
             progress(ProgressState::Paused, 20),
         );
+    }
+
+    #[cfg(not(any(target_os = "macos", windows)))]
+    #[test]
+    fn launcher_shows_determinate_progress_and_flags_errors() {
+        use zbus::zvariant::Value;
+
+        let properties = launcher::properties(progress(ProgressState::Error, 40));
+        assert_eq!(properties["progress-visible"], Value::Bool(true));
+        assert_eq!(properties["progress"], Value::F64(0.4));
+        assert_eq!(properties["urgent"], Value::Bool(true));
+
+        let properties = launcher::properties(progress(ProgressState::Indeterminate, 40));
+        assert_eq!(properties["progress-visible"], Value::Bool(false));
+        assert_eq!(properties["urgent"], Value::Bool(false));
     }
 }
