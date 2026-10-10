@@ -24,6 +24,25 @@ fn shell_markers_capture_output_and_exit_status_without_prompts() {
 }
 
 #[test]
+fn markers_survive_zsh_erasing_from_the_cursor() {
+    // Recorded from zsh with the bundled integration: the line editor erases from the cursor
+    // right after `B`, and the prompt erases below the cursor right after `D`.
+    let (mut term, mut parser) = terminal(40, 8);
+    let prompt = b"\x1b[1m\x1b[7m%\x1b[27m\x1b[1m\x1b[0m \r \r\x1b]7;file://host/tmp\x07\r\x1b[0m\
+        \x1b[27m\x1b[24m\x1b[J\x1b]133;A\x07$ \x1b]133;B\x07\x1b[K\x1b[?2004h";
+    parser.advance(&mut term, prompt);
+    parser.advance(&mut term, b"e\x08echo hi; false\x1b[?2004l\r\r\n\x1b]133;C\x07hi\r\n");
+    parser.advance(&mut term, b"\x1b[1m\x1b[7m%\x1b[27m\x1b[1m\x1b[0m \r \r\x1b]133;D;1\x07");
+    parser.advance(&mut term, prompt);
+
+    let command = term.shell_state().last_command().unwrap();
+    assert_eq!(command.text, "echo hi; false");
+    assert_eq!(command.exit_status, Some(1));
+    assert_eq!(term.last_command_output().as_deref(), Some("hi"));
+    assert_eq!(term.shell_state().phase(), Phase::Input);
+}
+
+#[test]
 fn output_markers_follow_reflow_and_scrollback() {
     let (mut term, mut parser) = terminal(12, 3);
     parser.advance(&mut term, b"\x1b]133;A\x1b\\$ \x1b]133;B\x1b\\echo\r\n\x1b]133;C\x1b\\abcdefghijklmnopqrstuvwx\r\nlast\r\n\x1b]133;D;0\x1b\\\x1b]133;A\x1b\\$ ");

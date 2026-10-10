@@ -53,6 +53,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 - Lacking permissions to launch software sending Apple events
 - Off-by-one in vi mode ParagraphUp action
 - Unbounded per-cell memory usage for zero-width cells
+- Empty last command and output with zsh shell integration
 
 ## 0.17.0
 

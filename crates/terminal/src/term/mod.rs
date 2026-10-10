@@ -1747,9 +1747,18 @@ impl<T: EventListener> Handler for Term<T> {
 
         self.damage.damage_line(point.line.0 as usize, left.0, right.0 - 1);
 
+        // Shells erase from the cursor right after placing a marker there.
+        let markers = matches!(mode, ansi::LineClearMode::Right)
+            .then(|| self.grid[point].shell_markers())
+            .flatten();
+
         let row = &mut self.grid[point.line];
         for cell in &mut row[left..right] {
             *cell = bg.into();
+        }
+
+        if let Some(markers) = markers {
+            self.grid.cursor_cell().set_shell_markers(markers);
         }
 
         let range = self.grid.cursor.point.line..=self.grid.cursor.point.line;
@@ -1894,8 +1903,13 @@ impl<T: EventListener> Handler for Term<T> {
             },
             ansi::ClearMode::Below => {
                 let cursor = self.grid.cursor.point;
+                // Shells erase from the cursor right after placing a marker there.
+                let markers = self.grid[cursor].shell_markers();
                 for cell in &mut self.grid[cursor.line][cursor.column..] {
                     *cell = bg.into();
+                }
+                if let Some(markers) = markers {
+                    self.grid.cursor_cell().set_shell_markers(markers);
                 }
 
                 if (cursor.line.0 as usize) < screen_lines - 1 {
