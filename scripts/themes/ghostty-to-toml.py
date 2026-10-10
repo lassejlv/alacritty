@@ -30,6 +30,8 @@ def color(value):
 
 
 def kebab(name):
+    # Keep brand names whole and drop the iTerm2 prefix of its Solarized variants.
+    name = name.replace("GitHub", "Github").removeprefix("iTerm2 ")
     name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", name)
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 

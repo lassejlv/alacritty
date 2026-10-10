@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Ayu Light" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Ayu%20Light
+
+[colors.primary]
+background = "#f8f9fa"
+foreground = "#5c6166"
+
+[colors.cursor]
+background = "#ffaa33"
+foreground = "#f8f9fa"
+
+[colors.selection]
+background = "#035bd6"
+foreground = "#f8f9fa"
+
+[colors.normal]
+black = "#000000"
+red = "#ea6c6d"
+green = "#6cbf43"
+yellow = "#eca944"
+blue = "#3199e1"
+magenta = "#9e75c7"
+cyan = "#46ba94"
+white = "#bababa"
+
+[colors.bright]
+black = "#686868"
+red = "#f07171"
+green = "#86b300"
+yellow = "#f2ae49"
+blue = "#399ee6"
+magenta = "#a37acc"
+cyan = "#4cbf99"
+white = "#d1d1d1"

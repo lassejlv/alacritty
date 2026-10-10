@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Catppuccin Frappe" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Catppuccin%20Frappe
+
+[colors.primary]
+background = "#303446"
+foreground = "#c6d0f5"
+
+[colors.cursor]
+background = "#f2d5cf"
+foreground = "#303446"
+
+[colors.selection]
+background = "#f2d5cf"
+foreground = "#303446"
+
+[colors.normal]
+black = "#51576d"
+red = "#e78284"
+green = "#a6d189"
+yellow = "#e5c890"
+blue = "#8caaee"
+magenta = "#f4b8e4"
+cyan = "#81c8be"
+white = "#b5bfe2"
+
+[colors.bright]
+black = "#626880"
+red = "#eda0a2"
+green = "#b9dba2"
+yellow = "#ecd7ae"
+blue = "#adc2f3"
+magenta = "#f38ed8"
+cyan = "#98d2ca"
+white = "#a5adce"

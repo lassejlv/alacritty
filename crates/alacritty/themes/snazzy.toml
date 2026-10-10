@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Snazzy" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Snazzy
+
+[colors.primary]
+background = "#1e1f29"
+foreground = "#ebece6"
+
+[colors.cursor]
+background = "#e4e4e4"
+foreground = "#a9a9a9"
+
+[colors.selection]
+background = "#81aec6"
+foreground = "#000000"
+
+[colors.normal]
+black = "#000000"
+red = "#fc4346"
+green = "#50fb7c"
+yellow = "#f0fb8c"
+blue = "#49baff"
+magenta = "#fc4cb4"
+cyan = "#8be9fe"
+white = "#ededec"
+
+[colors.bright]
+black = "#555555"
+red = "#fc4346"
+green = "#50fb7c"
+yellow = "#f0fb8c"
+blue = "#49baff"
+magenta = "#fc4cb4"
+cyan = "#8be9fe"
+white = "#ededec"

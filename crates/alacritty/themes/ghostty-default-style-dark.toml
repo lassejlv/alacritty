@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Ghostty Default Style Dark" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Ghostty%20Default%20Style%20Dark
+
+[colors.primary]
+background = "#282c34"
+foreground = "#ffffff"
+
+[colors.cursor]
+background = "#ffffff"
+foreground = "#353a44"
+
+[colors.selection]
+background = "#ffffff"
+foreground = "#282c34"
+
+[colors.normal]
+black = "#1d1f21"
+red = "#cc6566"
+green = "#b6bd68"
+yellow = "#f0c674"
+blue = "#82a2be"
+magenta = "#b294bb"
+cyan = "#8abeb7"
+white = "#c4c8c6"
+
+[colors.bright]
+black = "#666666"
+red = "#d54e53"
+green = "#b9ca4b"
+yellow = "#e7c547"
+blue = "#7aa6da"
+magenta = "#c397d8"
+cyan = "#70c0b1"
+white = "#eaeaea"

@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Kanagawa Lotus" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Kanagawa%20Lotus
+
+[colors.primary]
+background = "#f2ecbc"
+foreground = "#545464"
+
+[colors.cursor]
+background = "#43436c"
+foreground = "#f2ecbc"
+
+[colors.selection]
+background = "#545464"
+foreground = "#f2ecbc"
+
+[colors.normal]
+black = "#1f1f28"
+red = "#c84053"
+green = "#6f894e"
+yellow = "#77713f"
+blue = "#4d699b"
+magenta = "#b35b79"
+cyan = "#597b75"
+white = "#545464"
+
+[colors.bright]
+black = "#8a8980"
+red = "#d7474b"
+green = "#6e915f"
+yellow = "#836f4a"
+blue = "#6693bf"
+magenta = "#624c83"
+cyan = "#5e857a"
+white = "#43436c"

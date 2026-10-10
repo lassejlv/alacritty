@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Apple System Colors" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Apple%20System%20Colors
+
+[colors.primary]
+background = "#1e1e1e"
+foreground = "#ffffff"
+
+[colors.cursor]
+background = "#98989d"
+foreground = "#ffffff"
+
+[colors.selection]
+background = "#3f638b"
+foreground = "#ffffff"
+
+[colors.normal]
+black = "#1a1a1a"
+red = "#cc372e"
+green = "#26a439"
+yellow = "#cdac08"
+blue = "#0869cb"
+magenta = "#9647bf"
+cyan = "#479ec2"
+white = "#98989d"
+
+[colors.bright]
+black = "#464646"
+red = "#ff453a"
+green = "#32d74b"
+yellow = "#ffd60a"
+blue = "#0a84ff"
+magenta = "#bf5af2"
+cyan = "#76d6ff"
+white = "#ffffff"

@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Tomorrow" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Tomorrow
+
+[colors.primary]
+background = "#ffffff"
+foreground = "#4d4d4c"
+
+[colors.cursor]
+background = "#4d4d4c"
+foreground = "#ffffff"
+
+[colors.selection]
+background = "#d6d6d6"
+foreground = "#4d4d4c"
+
+[colors.normal]
+black = "#000000"
+red = "#c82829"
+green = "#718c00"
+yellow = "#eab700"
+blue = "#4271ae"
+magenta = "#8959a8"
+cyan = "#3e999f"
+white = "#bfbfbf"
+
+[colors.bright]
+black = "#000000"
+red = "#c82829"
+green = "#718c00"
+yellow = "#eab700"
+blue = "#4271ae"
+magenta = "#8959a8"
+cyan = "#3e999f"
+white = "#ffffff"

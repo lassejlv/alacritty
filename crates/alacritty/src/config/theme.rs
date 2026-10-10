@@ -129,6 +129,10 @@ mod tests {
     #[test]
     fn builtin_themes_only_set_colors() {
         assert!(!BUILTIN_THEMES.is_empty());
+        let mut names: Vec<_> = BUILTIN_THEMES.iter().map(|(name, _)| normalize(name)).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), BUILTIN_THEMES.len(), "theme names must stay distinct");
         for (name, theme) in BUILTIN_THEMES {
             let theme: Value = toml::from_str(theme).unwrap();
             let keys: Vec<_> = theme.as_table().unwrap().keys().collect();
@@ -197,6 +201,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("mine.toml"), "").unwrap();
         let err = load("missing", Some(dir.path()), &mut Vec::new()).unwrap_err();
-        assert!(err.contains("available themes: mine, tokyo-night"), "{err}");
+        assert!(err.contains("available themes: mine, "), "{err}");
+        assert!(err.contains(", tokyo-night"), "{err}");
     }
 }

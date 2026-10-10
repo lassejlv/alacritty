@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Doom One" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Doom%20One
+
+[colors.primary]
+background = "#282c34"
+foreground = "#bbc2cf"
+
+[colors.cursor]
+background = "#51afef"
+foreground = "#1b1b1b"
+
+[colors.selection]
+background = "#42444b"
+foreground = "#bbc2cf"
+
+[colors.normal]
+black = "#000000"
+red = "#ff6c6b"
+green = "#98be65"
+yellow = "#ecbe7b"
+blue = "#a9a1e1"
+magenta = "#c678dd"
+cyan = "#51afef"
+white = "#bbc2cf"
+
+[colors.bright]
+black = "#595959"
+red = "#ff6655"
+green = "#99bb66"
+yellow = "#ecbe7b"
+blue = "#a9a1e1"
+magenta = "#c678dd"
+cyan = "#51afef"
+white = "#bfbfbf"

@@ -53,8 +53,25 @@ This section documents the *[general]* table of the configuration file.
 	*[colors]* table still override individual colors. Names ignore case and
 	punctuation, so _"TokyoNight Storm"_ selects _"tokyo-night-storm"_.
 
-	Built-in themes: _"tokyo-night"_, _"tokyo-night-day"_,
-	_"tokyo-night-moon"_, _"tokyo-night-night"_, _"tokyo-night-storm"_.
+	Built-in themes: _"apple-system-colors"_, _"apple-system-colors-light"_,
+	_"atom-one-dark"_, _"atom-one-light"_, _"ayu"_, _"ayu-light"_,
+	_"ayu-mirage"_, _"carbonfox"_, _"catppuccin-frappe"_, _"catppuccin-latte"_,
+	_"catppuccin-macchiato"_, _"catppuccin-mocha"_, _"cobalt2"_, _"dayfox"_,
+	_"doom-one"_, _"dracula"_, _"everforest-dark-med"_,
+	_"everforest-light-med"_, _"flexoki-dark"_, _"flexoki-light"_,
+	_"ghostty-default-style-dark"_, _"github-dark-default"_,
+	_"github-dark-dimmed"_, _"github-light-default"_, _"gruvbox-dark"_,
+	_"gruvbox-dark-hard"_, _"gruvbox-light"_, _"gruvbox-material-dark"_,
+	_"gruvbox-material-light"_, _"horizon"_, _"iceberg-dark"_,
+	_"iceberg-light"_, _"jellybeans"_, _"kanagawa-dragon"_, _"kanagawa-lotus"_,
+	_"kanagawa-wave"_, _"material-ocean"_, _"melange-dark"_, _"melange-light"_,
+	_"monokai-classic"_, _"monokai-pro"_, _"moonfly"_, _"night-owl"_,
+	_"nightfox"_, _"nord"_, _"nord-light"_, _"oxocarbon"_, _"poimandres"_,
+	_"rose-pine"_, _"rose-pine-dawn"_, _"rose-pine-moon"_, _"snazzy"_,
+	_"solarized-dark"_, _"solarized-light"_, _"sonokai"_, _"tokyo-night"_,
+	_"tokyo-night-day"_, _"tokyo-night-moon"_, _"tokyo-night-night"_,
+	_"tokyo-night-storm"_, _"tomorrow"_, _"tomorrow-night"_, _"vesper"_,
+	_"xcode-dark"_, _"xcode-light"_, _"zenburn"_.
 
 	User themes are TOML config files in _$XDG_CONFIG_HOME/alacritty/themes/_
 	(_~/.config/alacritty/themes/_ by default) or

@@ -1,0 +1,34 @@
+# Converted from Ghostty's "Everforest Dark Med" theme.
+# Source: https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Everforest%20Dark%20Med
+
+[colors.primary]
+background = "#232a2e"
+foreground = "#d3c6aa"
+
+[colors.cursor]
+background = "#e69875"
+foreground = "#543a48"
+
+[colors.selection]
+background = "#543a48"
+foreground = "#d3c6aa"
+
+[colors.normal]
+black = "#7a8478"
+red = "#e67e80"
+green = "#a7c080"
+yellow = "#dbbc7f"
+blue = "#7fbbb3"
+magenta = "#d699b6"
+cyan = "#83c092"
+white = "#f2efdf"
+
+[colors.bright]
+black = "#a6b0a0"
+red = "#f85552"
+green = "#8da101"
+yellow = "#dfa000"
+blue = "#3a94c5"
+magenta = "#df69ba"
+cyan = "#35a77c"
+white = "#fffbef"
